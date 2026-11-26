@@ -173,8 +173,9 @@ private:
     // putting them back as they were.
     QVariantMap choicesFor(const QString& name, const QString& repositoryUrl) const;
     void forgetPicks();
-    // The optional packages ticked in its open details change something.
-    bool optionalChangesPending(const QString& name, const QString& repositoryUrl) const;
+    // Its open details change something: an optional package ticked, or a
+    // version picked for one it needs.
+    bool changesPending(const QString& name, const QString& repositoryUrl) const;
 
     logos::installer::PackageModel* m_model;
     logos::installer::InstallProgress* m_progress;

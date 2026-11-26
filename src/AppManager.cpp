@@ -327,8 +327,8 @@ bool AppManager::install(const QString& name, const QString& repositoryUrl)
         return true;
     case RowAction::NoOp:
         // Current itself: an install brings what it is missing, what its
-        // dependencies need, and the optional packages ticked in its details.
-        if (!canInstall || (status == InstallStatus::Installed && !optionalChangesPending(name, repo)))
+        // dependencies need, and what its details changed (changesPending()).
+        if (!canInstall || (status == InstallStatus::Installed && !changesPending(name, repo)))
             return false;
         m_installer->install(name, version, repo, choices);
         return true;
@@ -485,15 +485,17 @@ void AppManager::forgetPicks()
     m_versions.clear();
 }
 
-bool AppManager::optionalChangesPending(const QString& name, const QString& repositoryUrl) const
+bool AppManager::changesPending(const QString& name, const QString& repositoryUrl) const
 {
     if (name != m_detailsName || repositoryUrl != str(m_details, "repositoryUrl")) return false;
     for (const QVariant& v : m_details.value(QStringLiteral("packages")).toList()) {
         const QVariantMap p = v.toMap();
-        // Ticked, or coming with one that is.
-        if (!p.value(QStringLiteral("optional")).toBool()
-            || (p.contains(QStringLiteral("selected")) && !p.value(QStringLiteral("selected")).toBool()))
-            continue;
+        // An optional one ticked, or coming with one that is; one it needs, at
+        // the version picked.
+        const bool asked = p.value(QStringLiteral("optional")).toBool()
+            ? !(p.contains(QStringLiteral("selected")) && !p.value(QStringLiteral("selected")).toBool())
+            : p.value(QStringLiteral("picked")).toBool() && !p.value(QStringLiteral("subject")).toBool();
+        if (!asked) continue;
         switch (static_cast<RowAction>(p.value(QStringLiteral("rowAction")).toInt())) {
         case RowAction::Install:
         case RowAction::Upgrade:

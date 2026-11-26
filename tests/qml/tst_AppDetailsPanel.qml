@@ -449,6 +449,27 @@ TestCase {
         compare(installSpy.count, 1)
     }
 
+    // A version picked for a package it needs is a change too, and only a
+    // pick is: it used to change that package's row, with nothing to apply it.
+    function test_an_installed_app_installs_a_version_picked_for_a_package_it_needs() {
+        const installedWallet = (signer) => Rows.installed("wallet_ui", {
+            installedVersion: "2.0.0", availableVersions: versions(), selectedVersionIndex: 0,
+            packages: [self({ installedVersion: "2.0.0", rowAction: Types.RowAction.NoOp }),
+                       pkg("signer", Object.assign({ installedVersion: "2.0.0", versions: ["2.0.0", "1.0.0"] },
+                                                   signer))] })
+        let page = makePage(installedWallet({ version: "2.0.0", rowAction: Types.RowAction.NoOp }))
+        compare(find(page, "appManager.details.action").visible, false)
+        page = makePage(installedWallet({ version: "2.1.0", rowAction: Types.RowAction.Upgrade }))
+        compare(find(page, "appManager.details.action").visible, false)
+        page = makePage(installedWallet({ version: "1.0.0", rowAction: Types.RowAction.Downgrade, picked: true }))
+        const action = find(page, "appManager.details.action")
+        verify(action.visible)
+        verify(action.enabled)
+        compare(action.text, "Install")
+        mouseClick(action)
+        compare(installSpy.count, 1)
+    }
+
     // As the old dialog had it: what the download source can't serve isn't
     // offered.
     function test_only_versions_this_host_can_fetch_are_offered() {

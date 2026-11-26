@@ -668,6 +668,26 @@ TEST(an_installed_app_installs_the_optional_packages_ticked_in_its_details) {
     CHECK_EQ(a.lastParams().value("optional").toMap(), (QVariantMap{{"rln", true}}));
 }
 
+// A version picked in its details for a package it needs installs too: the
+// pick used to change only that package's row, and nothing asked Basecamp.
+TEST(an_installed_app_installs_the_version_picked_for_a_package_it_needs) {
+    App a;
+    a.modules.catalog = {app(kDefault, "storage_ui", "1.0.0", "U", {dep("storage")}),
+                         withOlderVersion(catalogRow(kDefault, "storage", "2.0.0", "S2", {}, kHere, "core"),
+                                          "1.0.0", "S1")};
+    a.modules.addInstalled("storage_ui", "1.0.0", "U");
+    a.modules.addInstalled("storage", "2.0.0", "S2");
+    a.manager.load();
+    a.manager.showDetails("storage_ui", kDefault);
+    CHECK(!a.manager.install("storage_ui", kDefault));
+    CHECK(a.basecamp.asked.isEmpty());
+
+    a.manager.selectVersion("storage", kDefault, "1.0.0");
+    CHECK(a.manager.install("storage_ui", kDefault));
+    CHECK_EQ(a.lastIntent(), QStringLiteral("basecamp.packages.confirm_install"));
+    CHECK_EQ(a.lastParams().value("versions").toMap(), (QVariantMap{{"storage", "1.0.0"}}));
+}
+
 // ── Reload and events ────────────────────────────────────────────────────
 
 TEST(reload_fetches_every_repository_again) {

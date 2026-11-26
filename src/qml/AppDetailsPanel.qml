@@ -92,9 +92,11 @@ Rectangle {
         readonly property bool unresolved: required.some(p => !p.found || p.conflict === true)
         // Another install is bringing one of them: wait for it.
         readonly property bool waiting: !installing && installingCount > 0
-        // An optional package ticked, or what comes with one, would change.
-        readonly property bool optionalChanges:
+        // An optional package ticked, or what comes with one, would change, or
+        // one it needs at the version picked.
+        readonly property bool pendingChanges:
             optional.some(p => (p.offeredBy === undefined || p.selected === true) && changes(p.rowAction))
+            || required.some(p => p.picked === true && !p.subject && changes(p.rowAction))
         readonly property real downloadBytes: changing.reduce((sum, p) => sum + (Number(p.size) || 0), 0)
 
         // What installing it does, in the Add Application dialog's words.
@@ -448,9 +450,9 @@ Rectangle {
                     id: actionButton
                     objectName: "appManager.details.action"
                     // Nothing to change: Open is the only thing to do. An
-                    // installed app installs the optional packages ticked.
+                    // installed app installs what its details changed.
                     visible: d.installing || (d.repositoryUrl.length > 0
-                                              && (d.action !== Types.RowAction.NoOp || d.optionalChanges))
+                                              && (d.action !== Types.RowAction.NoOp || d.pendingChanges))
                     enabled: !d.installing && d.available && !d.unresolved && !d.waiting
                     text: d.installing ? Stages.stageWord(d.stage)
                         : Stages.actionWord(d.action !== Types.RowAction.NoOp ? d.action : Types.RowAction.Install)
