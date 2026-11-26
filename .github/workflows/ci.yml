@@ -6,6 +6,18 @@ on:
   pull_request:
 
 jobs:
+  build:
+    name: Module (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: logos-co/setup-nix-cache-action@v1
+      - run: nix build -L
+
   checks:
     name: ${{ matrix.check }} (${{ matrix.os }})
     strategy:
