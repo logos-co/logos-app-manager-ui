@@ -1,0 +1,3 @@
+# Unrelated uses of words the shared installer files also say. Each line is
+# "<path ending>: <phrase>", the reason after " # ".
+src/qml/AppManagerPanelHeader.qml: Installed # the filter tab's name, not a stage
