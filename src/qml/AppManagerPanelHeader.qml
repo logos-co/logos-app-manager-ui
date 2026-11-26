@@ -71,7 +71,7 @@ LogosItemLayout {
                 Layout.preferredHeight: 40
                 size: 40
                 iconSize: 16
-                iconSource: Qt.resolvedUrl("images/filter.svg")
+                iconSource: LogosIcons.filter
                 iconColor: root.showUnavailable
                            ? Theme.palette.primary
                            : Theme.palette.text
