@@ -28,7 +28,8 @@
     {
       "intent": "packages.install",
       "handoff": true,
-      "params": [{"name": "name", "type": "string", "required": true}]
+      "params": [{"name": "name", "type": "string", "required": true},
+                 {"name": "repositoryUrl", "type": "string", "required": false}]
     },
     {
       "intent": "apps.search",

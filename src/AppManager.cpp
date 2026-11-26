@@ -337,10 +337,13 @@ bool AppManager::install(const QString& name, const QString& repositoryUrl)
     }
 }
 
-bool AppManager::openByName(const QString& name, bool andInstall)
+bool AppManager::openByName(const QString& name, bool andInstall, const QString& repositoryUrl)
 {
     if (name.isEmpty() || name == kShell || !m_catalog) return false;
-    for (const QString& key : m_catalog->sourceOrder()) {
+    // The repository it was picked from, before the rest.
+    QStringList order = m_catalog->sourceOrder();
+    if (order.removeAll(repositoryUrl) > 0) order.prepend(repositoryUrl);
+    for (const QString& key : order) {
         const int row = key == kLocal ? -1 : m_model->rowOf(name, key);
         // Apps only, as the page lists them.
         if (row < 0 || !isApp(m_model->rowAt(row)) || !fromEnabledSource(m_model->rowAt(row))) continue;
@@ -382,16 +385,18 @@ bool AppManager::deliver(const QString& intent, const QVariantMap& params, const
         return true;
     }
     const QString name = params.value(QStringLiteral("name")).toString();
+    // Where it was picked, when the request says: two repositories can list it.
+    const QString repositoryUrl = params.value(QStringLiteral("repositoryUrl")).toString();
     // Basecamp's own request is the person's click there. Another app's only
     // shows the app: its install is the person's to ask for, here.
     const bool andInstall = requester == kShell;
     if (m_catalog && m_catalog->hasLoaded() && !m_catalog->isLoading()) {
-        const bool taken = openByName(name, andInstall);
+        const bool taken = openByName(name, andInstall, repositoryUrl);
         respond(taken, taken ? QString() : QStringLiteral("failed"));
         return true;
     }
     const int id = ++m_nextDelivery;
-    m_deliveries.append({id, name, andInstall, std::move(respond)});
+    m_deliveries.append({id, name, repositoryUrl, andInstall, std::move(respond)});
     QTimer::singleShot(m_deliveryTimeoutMs, this, [this, id] {
         for (int i = 0; i < m_deliveries.size(); ++i) {
             if (m_deliveries.at(i).id != id) continue;
@@ -407,7 +412,7 @@ void AppManager::takeDeliveries()
 {
     const QList<Delivery> waiting = std::exchange(m_deliveries, {});
     for (const Delivery& d : waiting) {
-        const bool taken = openByName(d.name, d.install);
+        const bool taken = openByName(d.name, d.install, d.repositoryUrl);
         d.respond(taken, taken ? QString() : QStringLiteral("failed"));
     }
 }

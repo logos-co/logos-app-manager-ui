@@ -57,7 +57,7 @@ their own under it.
 | | |
 |---|---|
 | Asks Basecamp | `basecamp.packages.confirm_install`, `_upgrade`, `_uninstall` (from the backend); `basecamp.apps.launch` to open an app, `basecamp.repositories.manage` (from the view) |
-| Provides | Delivered to the backend through `intents_module`. `packages.install`: an app is asked for by name. App Manager shows it, from the first enabled repository that has it as an app. For Basecamp's own request (the person's click there, e.g. the Welcome page) it also installs it, Basecamp's approval first; for another app's, the person's own click on Install is what asks Basecamp. It answers once the app is shown, not when an install is done. `apps.search`: the page searches for the query |
+| Provides | Delivered to the backend through `intents_module`. `packages.install`: an app is asked for by name, and optionally `repositoryUrl`, the repository it was picked from. App Manager shows it from that repository when it lists it as an app, else from the first enabled repository that does. For Basecamp's own request (the person's click there, e.g. the Welcome page) it also installs it, Basecamp's approval first; for another app's, the person's own click on Install is what asks Basecamp. It answers once the app is shown, not when an install is done. `apps.search`: the page searches for the query |
 
 ## Build and test
 

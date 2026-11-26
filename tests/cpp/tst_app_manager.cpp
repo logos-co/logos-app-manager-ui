@@ -280,10 +280,12 @@ struct Responses {
 
 // Basecamp's own request, the person's click there: whether it was taken on
 // at once.
-bool shellAsks(App& a, const QString& name)
+bool shellAsks(App& a, const QString& name, const QString& repositoryUrl = {})
 {
     const auto taken = std::make_shared<bool>(false);
-    a.manager.deliver("packages.install", {{"name", name}}, "main_ui",
+    QVariantMap params{{"name", name}};
+    if (!repositoryUrl.isEmpty()) params.insert("repositoryUrl", repositoryUrl);
+    a.manager.deliver("packages.install", params, "main_ui",
                       [taken](bool ok, const QString&) { *taken = ok; });
     return *taken;
 }
@@ -309,6 +311,22 @@ TEST(basecamps_request_takes_the_default_repository_first) {
         CHECK(!shellAsks(a, name));
         CHECK(!otherAppAsks(a, name));
     }
+}
+
+// The repository it was picked from comes first: with two that list it, the
+// first one used to win whichever was clicked.
+TEST(a_request_takes_the_repository_it_was_picked_from) {
+    App a;
+    a.modules.catalog = {app(kMine, "notes_ui", "1.0.0", "N1"), app(kDefault, "notes_ui", "1.0.0", "N2")};
+    a.manager.load();
+    CHECK(shellAsks(a, "notes_ui", kMine));
+    CHECK_EQ(a.lastParams().value("repositoryUrl").toString(), kMine);
+    CHECK_EQ(a.manager.details().value("repositoryUrl").toString(), kMine);
+    a.basecamp.waiting.takeFirst()(fakes::refuse("cancelled"));
+    SPIN(10);
+    // One that doesn't list it, or isn't known, leaves the usual order.
+    CHECK(shellAsks(a, "notes_ui", QStringLiteral("https://elsewhere")));
+    CHECK_EQ(a.lastParams().value("repositoryUrl").toString(), kDefault);
 }
 
 TEST(basecamps_request_for_an_installed_app_only_shows_it) {

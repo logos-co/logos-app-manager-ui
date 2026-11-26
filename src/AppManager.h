@@ -106,9 +106,10 @@ public:
     bool uninstall(const QString& name, const QString& repositoryUrl);
 
     // An intent this app provides, delivered through intents_module:
-    // packages.install {name}, answered through `respond` once taken on (an
-    // app just started waits for its catalog): its details, from the first
-    // repository that has it as an app, and for Basecamp's own request
+    // packages.install {name, repositoryUrl}, answered through `respond` once
+    // taken on (an app just started waits for its catalog): its details, from
+    // `repositoryUrl` when it has it as an app (the one it was picked from),
+    // else the first repository that does, and for Basecamp's own request
     // (`requester` main_ui), the person's click there, install() too;
     // apps.search {query}, the page searching for it. False for an intent it
     // doesn't provide.
@@ -154,14 +155,15 @@ private:
     struct Delivery {
         int id = 0;
         QString name;
+        QString repositoryUrl;
         bool install = false;
         Respond respond;
     };
 
     int rowOf(const QString& name, const QString& repositoryUrl) const;
-    // `name`'s details, from the first repository that has it as an app,
-    // and with `install`, install() too.
-    bool openByName(const QString& name, bool install);
+    // `name`'s details, from `repositoryUrl` when it has it as an app, else
+    // the first repository that does, and with `install`, install() too.
+    bool openByName(const QString& name, bool install, const QString& repositoryUrl = {});
     // An app: ui_qml, and not the shell.
     static bool isApp(const QVariantMap& row);
     // From a repository that is enabled, or from a file.
