@@ -730,6 +730,30 @@ TEST(a_version_is_picked_by_its_name) {
     CHECK_EQ(a.manager.details().value("version").toString(), QStringLiteral("2.0.0"));
 }
 
+// The app's own version picked in its details goes with them: opened again,
+// or once another app's open, they show what its tile does. The pick stayed
+// on its row, and came back.
+TEST(the_apps_own_version_picked_goes_with_its_details) {
+    App a;
+    a.modules.catalog = {withOlderVersion(app(kDefault, "wallet_ui", "2.0.0", "W2"), "1.0.0", "W1"),
+                         app(kDefault, "chat_ui", "1.0.0", "C")};
+    a.modules.addInstalled("wallet_ui", "1.0.0", "W1");
+    a.manager.load();
+    const auto shown = [&a]() { return a.manager.details().value("version").toString(); };
+    a.manager.showDetails("wallet_ui", kDefault);
+    CHECK_EQ(shown(), QStringLiteral("2.0.0"));
+    a.manager.selectVersion("wallet_ui", kDefault, "1.0.0");
+    CHECK_EQ(shown(), QStringLiteral("1.0.0"));
+    a.manager.closeDetails();
+    a.manager.showDetails("wallet_ui", kDefault);
+    CHECK_EQ(shown(), QStringLiteral("2.0.0"));
+
+    a.manager.selectVersion("wallet_ui", kDefault, "1.0.0");
+    a.manager.showDetails("chat_ui", kDefault);
+    a.manager.showDetails("wallet_ui", kDefault);
+    CHECK_EQ(shown(), QStringLiteral("2.0.0"));
+}
+
 // ── Loading ──────────────────────────────────────────────────────────────
 
 // A read that failed is not an empty catalog: it says so, and the next good

@@ -483,6 +483,10 @@ void AppManager::forgetPicks()
 {
     m_optional.clear();
     m_versions.clear();
+    // The app's own version is picked on its row: back to the newest, as its
+    // tile shows it.
+    const int row = rowOf(m_detailsName, m_detailsRepositoryUrl);
+    if (row >= 0) m_model->selectVersion(row, 0);
 }
 
 bool AppManager::changesPending(const QString& name, const QString& repositoryUrl) const
