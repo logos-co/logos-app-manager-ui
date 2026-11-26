@@ -8,7 +8,6 @@ import Logos.Layouts
 import Logos.Theme
 
 import "Installer/Downloads.js" as Downloads
-import "Installer/MonogramColor.js" as MonogramColor
 import "Installer/Stages.js" as Stages
 import "Installer/Types.js" as Types
 import "Icons.js" as Icons
@@ -211,9 +210,8 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         label: d.displayName
                         source: Icons.shown(root.sandboxImages, d.app.iconUrl || "")
-                        fallbackColor: d.installed
-                                       ? Theme.palette.background
-                                       : MonogramColor.colorForApp(d.name) || Theme.palette.background
+                        // No colour of its own; the panel is surfaceRaised.
+                        fallbackColor: Theme.palette.background
                         tileSize: 64
                         insetArtwork: d.app.supportsFullBleedIcon !== true
                         interactive: false

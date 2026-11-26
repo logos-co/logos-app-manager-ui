@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
 
+import Logos.Theme
+
 import "../../src/qml"
 import "../../src/qml/Installer/Types.js" as Types
 import "Rows.js" as Rows
@@ -186,6 +188,24 @@ TestCase {
         verify(icon, "found the tile's icon")
         compare(String(icon.source), testCase.sandboxed)
         verify(fakeImages.asked.indexOf(testCase.iconData) >= 0, "asked SandboxImages for it")
+    }
+
+    // An app without an icon has no colour of its own, installed or not, as
+    // Basecamp's sidebar shows it.
+    function test_a_tile_without_an_icon_has_no_colour_of_its_own_data() {
+        return [{ tag: "grid", comp: gridDelegateComp }, { tag: "list", comp: listDelegateComp }]
+    }
+
+    function test_a_tile_without_an_icon_has_no_colour_of_its_own(data) {
+        for (const installed of [false, true]) {
+            const delegate = createTemporaryObject(data.comp, testCase, {
+                width: 200, height: 162,
+                appData: Rows.app("wallet_ui", { isInstalled: installed }),
+            })
+            const icon = findByObjectName(delegate, "appManager.tileIcon")
+            verify(Qt.colorEqual(icon.fallbackColor, Theme.palette.surfaceRaised),
+                   "installed " + installed + ": " + icon.fallbackColor)
+        }
     }
 
     function test_an_icon_shows_from_its_url_outside_basecamp() {

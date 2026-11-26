@@ -6,7 +6,6 @@ import Logos.Icons
 import Logos.Theme
 
 import "Installer/Downloads.js" as Downloads
-import "Installer/MonogramColor.js" as MonogramColor
 import "Installer/Stages.js" as Stages
 import "Installer/Types.js" as Types
 import "Icons.js" as Icons
@@ -168,9 +167,8 @@ ItemDelegate {
             label: d.nameText
             objectName: "appManager.tileIcon"
             source: d.iconUrl
-            fallbackColor: d.isInstalled
-                           ? Theme.palette.surfaceRaised
-                           : MonogramColor.colorForApp(d.nameText) || Theme.palette.surfaceRaised
+            // No colour of its own, as Basecamp's sidebar shows it.
+            fallbackColor: Theme.palette.surfaceRaised
             tileSize: d.tileSize
             dimOpacity: d.tileOpacity
             insetArtwork: !d.fullBleedIcon

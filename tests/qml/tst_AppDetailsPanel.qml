@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
 
+import Logos.Theme
+
 import "../../src/qml"
 import "../../src/qml/Installer/Types.js" as Types
 import "Rows.js" as Rows
@@ -61,6 +63,16 @@ TestCase {
         compare(String(find(page, "appManager.details.icon").source),
                 "image://sandbox-media/0123456789abcdef01234567")
         images.destroy()
+    }
+
+    // An app without an icon has no colour of its own, installed or not.
+    function test_an_icon_less_app_has_no_colour_of_its_own() {
+        for (const installed of [false, true]) {
+            const page = makePage(Rows.app("wallet_ui", { isInstalled: installed }))
+            const icon = find(page, "appManager.details.icon")
+            verify(Qt.colorEqual(icon.fallbackColor, Theme.palette.background),
+                   "installed " + installed + ": " + icon.fallbackColor)
+        }
     }
 
     function test_an_app_not_installed_offers_install() {
