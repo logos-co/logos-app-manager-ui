@@ -82,7 +82,6 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: d.nested ? optionalBox.implicitWidth + Theme.spacing.small : 0
         spacing: 2
 
         RowLayout {
@@ -92,9 +91,13 @@ Item {
             LogosCheckbox {
                 id: optionalBox
                 objectName: "packageRow.optional"
-                visible: d.r.optional === true && !d.nested
+                visible: d.r.optional === true
+                // One that comes with the optional package above has nothing to
+                // tick, and keeps the box's place, so it lines up with the rest.
+                opacity: d.nested ? 0 : 1
+                Accessible.ignored: d.nested
                 // On disk with nothing in a catalog: kept, nothing to choose.
-                enabled: !root.installing && d.r.found !== false && d.r.installedOnly !== true
+                enabled: !d.nested && !root.installing && d.r.found !== false && d.r.installedOnly !== true
                          && d.r.rowAction !== Types.RowAction.NotAvailable
                 checked: d.r.selected === true
                 onToggled: root.optionalToggled(d.r.name || "", checked)

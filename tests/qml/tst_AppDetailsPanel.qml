@@ -395,7 +395,8 @@ TestCase {
         const row = (name) => find(page, "appManager.details.package." + name)
         const nameX = (name) => { const n = find(row(name), "packageRow.name"); return n.mapToItem(page, 0, 0).x }
         verify(find(row("rln"), "packageRow.optional").visible)
-        compare(find(row("zk"), "packageRow.optional").visible, false)
+        // Nothing to tick: its box only keeps the place.
+        compare(find(row("zk"), "packageRow.optional").opacity, 0)
         verify(find(row("zk"), "packageRow.versionPicker").visible)
         compare(nameX("zk"), nameX("rln"))
         verify(nameX("zk") > nameX("delivery"))
@@ -468,6 +469,19 @@ TestCase {
         compare(action.text, "Install")
         mouseClick(action)
         compare(installSpy.count, 1)
+    }
+
+    // A package that comes with an optional one lines up with the others:
+    // the whole row sat further right than the rest.
+    function test_a_package_that_comes_with_an_optional_lines_up() {
+        const page = makePage(wallet([self(),
+            pkg("rln", { optional: true, selected: true, offeredBy: "delivery", repositoryUrl: Rows.repo }),
+            pkg("lez_rln", { optional: true, requiredFor: ["rln"], repositoryUrl: Rows.repo })]))
+        const xOf = (row, part) =>
+            find(find(page, "appManager.details.package." + row), part).mapToItem(page, 0, 0).x
+        for (const part of ["packageRow.name", "packageRow.versionPicker"])
+            fuzzyCompare(xOf("lez_rln", part), xOf("rln", part), 0.5)
+        compare(find(find(page, "appManager.details.package.lez_rln"), "packageRow.optional").enabled, false)
     }
 
     // As the old dialog had it: what the download source can't serve isn't
