@@ -1,0 +1,62 @@
+{
+  "name": "app_manager_ui",
+  "display_name": "App Manager",
+  "version": "1.0.0",
+  "type": "ui_qml",
+  "interface": "universal",
+  "category": "ui",
+  "description": "Browse, install, upgrade and remove Logos apps",
+  "main": "app_manager_ui_plugin",
+  "backend": "module",
+  "icon": "src/icons/app_manager.png",
+  "view": "qml/AppManager.qml",
+  "dependencies": [
+    "package_manager",
+    "package_downloader"
+  ],
+  "interface_dependencies": [
+    {"name": "intents", "file": "contracts/intents.lidl", "input": "logos-intents-module"}
+  ],
+  "uses": [
+    {"intent": "basecamp.apps.launch", "cardinality": "single"},
+    {"intent": "basecamp.repositories.manage", "cardinality": "single"},
+    {"intent": "basecamp.packages.confirm_install", "cardinality": "single"},
+    {"intent": "basecamp.packages.confirm_uninstall", "cardinality": "single"},
+    {"intent": "basecamp.packages.confirm_upgrade", "cardinality": "single"}
+  ],
+  "provides": [
+    {
+      "intent": "packages.install",
+      "handoff": true,
+      "params": [{"name": "name", "type": "string", "required": true}]
+    },
+    {
+      "intent": "apps.search",
+      "handoff": true,
+      "params": [{"name": "query", "type": "string", "required": true}]
+    }
+  ],
+  "codegen": {
+    "rep": "src/app_manager_ui.rep",
+    "backend_class": "AppManagerBackend",
+    "backend_header": "AppManagerBackend.h"
+  },
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": [
+        "qt6.qtdeclarative"
+      ]
+    },
+    "external_libraries": [
+      {
+        "name": "lgx"
+      }
+    ],
+    "cmake": {
+      "find_packages": ["Qt6Network"],
+      "extra_sources": [],
+      "extra_link_libraries": ["Qt6::Network"]
+    }
+  }
+}

@@ -1,0 +1,66 @@
+#include <QStringList>
+#include <QVariantMap>
+
+// What the App Manager's view reads and asks of its backend. The apps come
+// as the `apps` model beside it (AppSections: a row per section, then its
+// apps), which QML reaches with logos.model("app_manager_ui", "apps", true).
+class AppManagerUi
+{
+    // The catalog is being read.
+    PROP(bool loading READONLY)
+    // Why downloads may not work right now, for the notice under the header:
+    // `online` is false only when the platform says there is no internet;
+    // the downloader's download source and storage state are "" until it
+    // answers.
+    PROP(bool online=true READONLY)
+    PROP(QString downloadSource READONLY)
+    PROP(QString storageState READONLY)
+    // This host's variant, for "nothing for this platform".
+    PROP(QString hostVariant READONLY)
+    PROP(int repositoryCount READONLY)
+    // "All", then each category among the apps.
+    PROP(QStringList categories READONLY)
+    // The apps listed, and those of them no repository publishes.
+    PROP(int visibleCount READONLY)
+    PROP(int localCount READONLY)
+
+    // The filters, pushed by the view.
+    PROP(QString searchText)
+    PROP(QString category)
+    // 0 every app, 1 installed, 2 not installed.
+    PROP(int installState)
+    PROP(bool showUnavailable)
+
+    // The open app's row, every role by name; empty with none open.
+    PROP(QVariantMap details READONLY)
+    // Role name to id in `apps`, for reading the model by hand (tests).
+    PROP(QVariantMap appRoleIds READONLY)
+
+    // Reload: every repository fetched again.
+    SLOT(void refresh())
+
+    // What the person asked for. Basecamp approves each before anything
+    // happens, asked by this backend, never by the view; how it ended comes
+    // as finished(). False when there is nothing to do. install() does what
+    // the app's tile offers: install, upgrade, downgrade or reinstall it at
+    // the version it shows, or bring in what it is missing.
+    SLOT(bool install(QString name, QString repositoryUrl))
+    SLOT(bool uninstall(QString name, QString repositoryUrl))
+    // Another app's packages.install: `name`'s details, from the first
+    // repository that has it as an app; the person's own click on Install
+    // asks Basecamp. False when none has it.
+    SLOT(bool showByName(QString name))
+
+    SLOT(void showDetails(QString name, QString repositoryUrl))
+    SLOT(void closeDetails())
+    // The version of the open app, or of a package it brings; and whether an
+    // optional package comes with it. Both go to Basecamp with its install,
+    // and are forgotten when the details close.
+    SLOT(void selectVersion(QString name, QString repositoryUrl, int versionIndex))
+    SLOT(void setOptional(QString name, bool selected))
+
+    // outcome: 0 done, 1 cancelled, 2 failed.
+    SIGNAL(finished(QString name, int outcome, QString error))
+    // Another app's apps.search: the page searches for `query`.
+    SIGNAL(searchRequested(QString query))
+}
