@@ -59,6 +59,7 @@ struct App {
     AppManager manager;
     struct Finished { QString name; int outcome; QString error; };
     QList<Finished> finished;
+    QStringList changesEnded;
 
     App()
     {
@@ -78,6 +79,8 @@ struct App {
                          [this](const QString& name, int outcome, const QString& error) {
                              finished.append({name, outcome, error});
                          });
+        QObject::connect(&manager, &AppManager::changeEnded, &manager,
+                         [this](const QString& change) { changesEnded << change; });
     }
 
     void addLocal(const QString& name)
@@ -237,13 +240,17 @@ TEST(install_asks_basecamp_and_installs_nothing_until_it_says_yes) {
     CHECK(a.changes().isEmpty());
     CHECK_EQ(a.finished.size(), 1);
     CHECK_EQ(a.finished.last().outcome, static_cast<int>(Installer::Outcome::Cancelled));
+    // Basecamp started no change.
+    CHECK(a.changesEnded.isEmpty());
 
     a.basecamp.decide = [](const QString&, const QVariantMap&) {
-        return fakes::approve({{"plan", QVariantList{fakes::release(kDefault, "wallet_ui", "1.0.0", "W")}}});
+        return fakes::approve({{"plan", QVariantList{fakes::release(kDefault, "wallet_ui", "1.0.0", "W")}},
+                               {"change", "c1"}});
     };
     CHECK(a.manager.install("wallet_ui", kDefault));
     CHECK_EQ(a.changes(), QStringList{"install wallet_ui"});
     CHECK_EQ(a.finished.last().outcome, static_cast<int>(Installer::Outcome::Done));
+    CHECK_EQ(a.changesEnded, QStringList{"c1"});
 
     // package_manager says so; the tile follows what is on disk.
     a.manager.onPackagesChanged();

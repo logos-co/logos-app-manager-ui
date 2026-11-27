@@ -59,6 +59,8 @@ AppManagerBackend::AppManagerBackend(QObject* parent)
             [this](const QString& name, int outcome, const QString& error) {
                 emit finished(name, outcome, error);
             });
+    connect(m_manager, &AppManager::changeEnded, this,
+            [this](const QString& change) { emit changeEnded(change); });
     connect(m_manager, &AppManager::loadFailed, this,
             [this](const QString& error) { emit loadFailed(error); });
     connect(m_manager, &AppManager::searchRequested, this,
