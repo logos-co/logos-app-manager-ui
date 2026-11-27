@@ -3,7 +3,7 @@
 // package_downloader, package_manager and Basecamp's consent, faked. The
 // fake's package files hold what they are ("name|version|rootHash|signer"),
 // so what inspect and verify read follows the file, as package_manager's do.
-// Everything answers at once.
+// Everything answers at once, the keyring unless told to wait.
 
 #include <logos/installer/Consent.h>
 #include <logos/installer/InstallModules.h>
@@ -27,9 +27,16 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     QStringList variants{QStringLiteral("linux-x86_64")};
     QString downloadSource = QStringLiteral("any");
     QVariantMap storage{{"state", "running"}};
+    // Reads whose call fails ("getCatalog", ...).
+    QStringList failing;
 
     // Installed packages by name, as getInstalledPackages reports them.
     QHash<QString, QVariantMap> installed;
+    // The keyring, as listTrustedKeys reports it: [{did, displayName}].
+    QVariantList trustedKeys;
+    // With `keyringWaits`, listTrustedKeys answers when its answer runs.
+    bool keyringWaits = false;
+    QList<std::function<void()>> keyringAnswers;
     // What the downloader serves, keyed "name@version": "name|version|rootHash|signer".
     QHash<QString, QString> served;
 
@@ -66,12 +73,14 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     void listRepositories(std::function<void(const QVariantList&, bool)> done) override
     {
         calls << "listRepositories";
-        done(repositories, true);
+        const bool read = !failing.contains("listRepositories");
+        done(read ? repositories : QVariantList{}, read);
     }
     void getCatalog(std::function<void(const QVariantList&, bool)> done) override
     {
         calls << "getCatalog";
-        done(catalog, true);
+        const bool read = !failing.contains("getCatalog");
+        done(read ? catalog : QVariantList{}, read);
     }
     void refreshCatalog(std::function<void(const QString&)> done) override
     {
@@ -82,9 +91,23 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     void getStorageState(std::function<void(const QVariantMap&)> done) override { done(storage); }
     void getInstalledPackages(std::function<void(const QVariantList&, bool)> done) override
     {
-        done(installedList(), true);
+        const bool read = !failing.contains("getInstalledPackages");
+        done(read ? installedList() : QVariantList{}, read);
     }
-    void getValidVariants(std::function<void(const QStringList&, bool)> done) override { done(variants, true); }
+    void getValidVariants(std::function<void(const QStringList&, bool)> done) override
+    {
+        const bool read = !failing.contains("getValidVariants");
+        done(read ? variants : QStringList{}, read);
+    }
+    void listTrustedKeys(std::function<void(const QVariantList&, bool)> done) override
+    {
+        const auto answer = [this, done] {
+            const bool read = !failing.contains("listTrustedKeys");
+            done(read ? trustedKeys : QVariantList{}, read);
+        };
+        if (keyringWaits) keyringAnswers.append(answer);
+        else answer();
+    }
 
     // InstallModules
     void downloadPinned(const QString& repositoryUrl, const QString& name, const QString& version,

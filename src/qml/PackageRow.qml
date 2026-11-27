@@ -23,7 +23,8 @@ Item {
     // Nothing is picked while an install runs.
     property bool installing: false
 
-    signal versionPicked(string name, string repositoryUrl, int versionIndex)
+    // By the version's name: the backend's list may have moved since.
+    signal versionPicked(string name, string repositoryUrl, string version)
     signal optionalToggled(string name, bool selected)
 
     implicitHeight: content.implicitHeight + 2 * Theme.spacing.small
@@ -81,7 +82,6 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: d.nested ? optionalBox.implicitWidth + Theme.spacing.small : 0
         spacing: 2
 
         RowLayout {
@@ -91,9 +91,13 @@ Item {
             LogosCheckbox {
                 id: optionalBox
                 objectName: "packageRow.optional"
-                visible: d.r.optional === true && !d.nested
+                visible: d.r.optional === true
+                // One that comes with the optional package above has nothing to
+                // tick, and keeps the box's place, so it lines up with the rest.
+                opacity: d.nested ? 0 : 1
+                Accessible.ignored: d.nested
                 // On disk with nothing in a catalog: kept, nothing to choose.
-                enabled: !root.installing && d.r.found !== false && d.r.installedOnly !== true
+                enabled: !d.nested && !root.installing && d.r.found !== false && d.r.installedOnly !== true
                          && d.r.rowAction !== Types.RowAction.NotAvailable
                 checked: d.r.selected === true
                 onToggled: root.optionalToggled(d.r.name || "", checked)
@@ -104,6 +108,8 @@ Item {
                 objectName: "packageRow.name"
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
+                // Its own width, so the mark sits right after it.
+                Layout.maximumWidth: Math.ceil(implicitWidth)
                 text: d.r.displayName || d.r.name || ""
                 font.weight: Theme.typography.weightMedium
                 font.pixelSize: Theme.typography.primaryText
@@ -116,6 +122,14 @@ Item {
                     visible: nameHover.hovered && nameLabel.truncated
                 }
             }
+
+            TrustMark {
+                objectName: "packageRow.trust"
+                Layout.alignment: Qt.AlignVCenter
+                verdict: d.r.trust
+            }
+
+            Item { Layout.fillWidth: true }
 
             LogosBadge {
                 id: badge
@@ -175,7 +189,8 @@ Item {
                 model: d.served.map(i => d.versions[i])
                 currentIndex: d.served.indexOf(d.r.selectedVersionIndex || 0)
                 displayText: currentText ? "v" + currentText : ""
-                onActivated: (index) => root.versionPicked(d.r.name || "", d.r.repositoryUrl || "", d.served[index])
+                onActivated: (index) => root.versionPicked(d.r.name || "", d.r.repositoryUrl || "",
+                                                           d.versions[d.served[index]] || "")
             }
             // What is on disk, and what it would become; with nothing this
             // host can fetch, the version it would be.

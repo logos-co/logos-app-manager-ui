@@ -7,11 +7,11 @@ It lists the apps (`ui_qml` packages) of every repository Basecamp knows, a
 section each, with the apps installed from a file last; filters them by
 category, install state and search. An installed app's tile opens it; any
 other shows its details beside the list, as Package Manager shows a package:
-what it is, the download, what can be done with it, and, as Basecamp's Add
-Application dialog had them, the packages installing it brings, the app
-first, each with its state and a picker for its version, then the optional
-packages any of them offers, ticked to come, each with what it brings under
-it.
+what it is and who signed it, the download, what can be done with it, and, as
+Basecamp's Add Application dialog had them, the packages installing it
+brings, the app first, each with its state, who signed it and a picker for
+its version, then the optional packages any of them offers, ticked to come,
+each with what it brings under it.
 
 ## How it installs
 
@@ -28,18 +28,27 @@ The view never installs anything, and never sees an approval.
    approved, installs them in order, and checks each on disk.
 
 The view gets back only how it ended (`finished`), and the tiles show each
-download and install as it happens.
+download and install as it happens. One install runs at a time: an app asked
+for meanwhile is put to Basecamp at once, says Queued, and installs at its
+turn; Basecamp asks again first if what it was planned over changed.
+
+Who signed what, in the details, is Basecamp's install dialog's judgement and
+words (the library's `Trust.h` and `Trust.js`), on the keyring package_manager
+holds: the release picked for what installs, the copy on disk for what stays.
+Until the keyring answers nothing is said, and a keyring that can't be read
+trusts nobody. It only informs: Basecamp's dialog judges again, with rules of
+its own, and decides.
 
 All of this is [basecamp-installer-common](https://github.com/logos-co/basecamp-installer-common)'s,
 the library App Manager shares with Package Manager and Basecamp: the package
-rows and their rules, the filters, the catalog client and the install
-pipeline, and the JavaScript for their words.
+rows and their rules, the filters, the catalog client, the install pipeline
+and who signed what, and the JavaScript for their words.
 
 ## Layout
 
 | | |
 |---|---|
-| `src/qml/` | The view. `AppManager.qml` is the entry: the apps page (`AppManagerView`), an app's details beside it (`AppDetailsPanel`), and the provider side of `packages.install` |
+| `src/qml/` | The view. `AppManager.qml` is the entry: the apps page (`AppManagerView`), an app's details beside it (`AppDetailsPanel`), and what the shell couldn't do, in a toast |
 | `src/qml/Installer/` | The library's JavaScript, a copy: `scripts/sync-installer-common.sh` refreshes it, and the `shared-installer-words` check keeps it the pinned revision |
 | `src/app_manager_ui.rep` | What the view reads and asks of the backend |
 | `src/AppManagerBackend.*` | The backend, run as the core module `app_manager_ui_backend`: hands `AppManager` the package modules and Basecamp's consent, forwards the modules' events, mirrors its state into the `.rep` |
@@ -57,19 +66,19 @@ their own under it.
 | | |
 |---|---|
 | Asks Basecamp | `basecamp.packages.confirm_install`, `_upgrade`, `_uninstall` (from the backend); `basecamp.apps.launch` to open an app, `basecamp.repositories.manage` (from the view) |
-| Provides | `packages.install`: an app is asked for by name. App Manager shows it, from the first repository that has it as an app. For Basecamp's own request (the person's click there, e.g. the Welcome page) it also installs it, Basecamp's approval first; for another app's, the person's own click on Install is what asks Basecamp. It answers once the app is shown, not when an install is done |
+| Provides | Delivered to the backend through `intents_module`. `apps.install`: an app is asked for by name, and optionally `repositoryUrl`, the repository it was picked from. App Manager shows it from that repository when it lists it as an app, else from the first enabled repository that does. For Basecamp's own request (the person's click there, e.g. the Welcome page) it also installs it, Basecamp's approval first; for another app's, the person's own click on Install is what asks Basecamp. It answers once the app is shown, not when an install is done. `apps.search`: the page searches for the query. `packages.install` is Package Manager's |
 
 ## Build and test
 
-Until basecamp-installer-common is published, point its input at a checkout:
-
 ```bash
-o="--override-input basecamp-installer-common path:../basecamp-installer-common --no-write-lock-file"
-nix build $o                                        # the module
-nix build $o .#checks.aarch64-linux.unit-tests      # the backend's logic, on fakes
-nix build $o .#checks.aarch64-linux.shared-installer-words
-nix run $o .#qml-tests                              # the views, on Basecamp's design system
+nix build                                           # the module
+nix build .#checks.aarch64-linux.unit-tests         # the backend's logic, on fakes
+nix build .#checks.aarch64-linux.shared-installer-words
+nix run .#qml-tests                                 # the views, on Basecamp's design system
 ```
+
+To try a basecamp-installer-common change, add
+`--override-input basecamp-installer-common path:../basecamp-installer-common --no-write-lock-file`.
 
 - **unit-tests** (`tests/cpp`): `AppManager` and `AppSections` with fake
   package modules and a fake Basecamp. Basecamp's consent through

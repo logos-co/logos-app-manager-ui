@@ -7,7 +7,6 @@ import Logos.Icons
 import Logos.Theme
 
 import "Installer/Downloads.js" as Downloads
-import "Installer/MonogramColor.js" as MonogramColor
 import "Installer/Stages.js" as Stages
 import "Installer/Types.js" as Types
 import "Icons.js" as Icons
@@ -164,9 +163,8 @@ ItemDelegate {
                     label: d.nameText
                     objectName: "appManager.tileIcon"
                     source: d.iconUrl
-                    fallbackColor: d.isInstalled
-                                   ? Theme.palette.surfaceRaised
-                                   : MonogramColor.colorForApp(d.nameText) || Theme.palette.surfaceRaised
+                    // No colour of its own, as Basecamp's sidebar shows it.
+                    fallbackColor: Theme.palette.surfaceRaised
                     tileSize: d.tileSize
                     radius: Theme.spacing.radiusXlarge
                     dimOpacity: d.tileOpacity
@@ -192,6 +190,8 @@ ItemDelegate {
                     text: !d.isAvailable    ? Stages.actionWord(Types.RowAction.NotAvailable)
                         : d.hasProgress     ? Downloads.percent(d.dlReceived, d.dlTotal)
                         : d.findingPeers    ? Stages.findingPeersWord()
+                        // Waiting its turn: Basecamp asks about it once the install before it ends.
+                        : d.installStage === Types.InstallStage.Queued ? Stages.stageWord(Types.InstallStage.Queued)
                         : d.isInstalling    ? Stages.stageWord(Types.InstallStage.Installing)
                         : d.installStage === Types.InstallStage.Failed ? Stages.stageWord(Types.InstallStage.Failed)
                         : Stages.actionWord(d.statusAction)

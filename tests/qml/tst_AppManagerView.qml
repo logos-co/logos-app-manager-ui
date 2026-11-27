@@ -346,11 +346,44 @@ TestCase {
         verify(none.message.indexOf("linux-x86_64") >= 0, none.message)
     }
 
-    // Not "nothing for this platform" when it is the Installed tab that is empty.
+    // Not "nothing for this platform" when it is the Installed tab that is
+    // empty: the filters are, and they can be cleared.
     function test_an_empty_install_state_tab_is_not_the_platform() {
         const view = makeView([])
         find(view, "appManager.stateTabs").currentIndex = 1
         compare(find(view, "appManager.noneForPlatformView").visible, false)
+        verify(find(view, "appManager.noMatchView").visible)
+        mouseClick(find(view, "appManager.noMatchView.clear"))
+        compare(find(view, "appManager.stateTabs").currentIndex, 0)
+        compare(backend.installState, 0)
+    }
+
+    function test_a_category_with_nothing_offers_to_clear_it() {
+        const view = makeView([])
+        mouseClick(find(view, "appManager.category.Wallet"))
+        compare(backend.category, "Wallet")
+        verify(find(view, "appManager.noMatchView").visible)
+        compare(find(view, "appManager.noneForPlatformView").visible, false)
+        mouseClick(find(view, "appManager.noMatchView.clear"))
+        compare(backend.category, "All")
+    }
+
+    // A first load that failed knows nothing: not "no repositories".
+    function test_a_first_load_that_failed_says_so_and_retries() {
+        backend.repositoryCount = 0
+        backend.loaded = false
+        backend.loadError = "the catalog"
+        const view = makeView([])
+        const failed = find(view, "appManager.loadErrorView")
+        verify(failed.visible)
+        compare(failed.message, "Couldn't read the catalog.")
+        compare(find(view, "appManager.noReposView").visible, false)
+        mouseClick(find(view, "appManager.loadErrorView.retry"))
+        compare(backend.called("refresh").length, 1)
+        backend.loaded = true
+        backend.loadError = ""
+        compare(failed.visible, false)
+        verify(find(view, "appManager.noReposView").visible)
     }
 
     // ── Notices ──────────────────────────────────────────────────────────────

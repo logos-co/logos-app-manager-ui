@@ -1,6 +1,9 @@
 import QtQuick
 import QtTest
 
+import Logos.Icons
+import Logos.Theme
+
 import "../../src/qml"
 import "../../src/qml/Installer/Types.js" as Types
 import "Rows.js" as Rows
@@ -17,6 +20,7 @@ TestCase {
     when: windowShown
 
     Component { id: pageComp; AppDetailsPanel {} }
+    Component { id: markComp; TrustMark {} }
     SignalSpy { id: openSpy; signalName: "openRequested" }
     SignalSpy { id: installSpy; signalName: "installRequested" }
     SignalSpy { id: uninstallSpy; signalName: "uninstallRequested" }
@@ -61,6 +65,16 @@ TestCase {
         compare(String(find(page, "appManager.details.icon").source),
                 "image://sandbox-media/0123456789abcdef01234567")
         images.destroy()
+    }
+
+    // An app without an icon has no colour of its own, installed or not.
+    function test_an_icon_less_app_has_no_colour_of_its_own() {
+        for (const installed of [false, true]) {
+            const page = makePage(Rows.app("wallet_ui", { isInstalled: installed }))
+            const icon = find(page, "appManager.details.icon")
+            verify(Qt.colorEqual(icon.fallbackColor, Theme.palette.background),
+                   "installed " + installed + ": " + icon.fallbackColor)
+        }
     }
 
     function test_an_app_not_installed_offers_install() {
@@ -140,7 +154,7 @@ TestCase {
         compare(versionSpy.count, 1)
         compare(versionSpy.signalArguments[0][0], "wallet_ui")
         compare(versionSpy.signalArguments[0][1], Rows.repo)
-        compare(versionSpy.signalArguments[0][2], 1)
+        compare(versionSpy.signalArguments[0][2], "1.0.0")
     }
 
     // A picker on every row with a version, one version or many; one on disk
@@ -179,6 +193,16 @@ TestCase {
         compare(find(page, "appManager.details.open").visible, false)
         compare(find(find(page, "appManager.details.package.wallet_ui"), "packageRow.versionPicker").enabled,
                 false)
+    }
+
+    // Waiting its turn behind another install, Basecamp not asked yet: the
+    // details say Queued, and nothing else can be asked.
+    function test_a_request_waiting_its_turn_says_queued() {
+        const page = makePage(wallet([self()], { planInstallStage: Types.InstallStage.Queued }))
+        const action = find(page, "appManager.details.action")
+        compare(action.text, "Queued")
+        compare(action.enabled, false)
+        compare(find(page, "appManager.details.footer").text, "Queued")
     }
 
     function test_a_failed_install_says_why_and_offers_retry() {
@@ -331,7 +355,7 @@ TestCase {
         compare(versionSpy.count, 1)
         compare(versionSpy.signalArguments[0][0], "signer")
         compare(versionSpy.signalArguments[0][1], Rows.repo)
-        compare(versionSpy.signalArguments[0][2], 1)
+        compare(versionSpy.signalArguments[0][2], "1.0.0")
     }
 
     function test_an_optional_package_can_be_left_out() {
@@ -383,7 +407,8 @@ TestCase {
         const row = (name) => find(page, "appManager.details.package." + name)
         const nameX = (name) => { const n = find(row(name), "packageRow.name"); return n.mapToItem(page, 0, 0).x }
         verify(find(row("rln"), "packageRow.optional").visible)
-        compare(find(row("zk"), "packageRow.optional").visible, false)
+        // Nothing to tick: its box only keeps the place.
+        compare(find(row("zk"), "packageRow.optional").opacity, 0)
         verify(find(row("zk"), "packageRow.versionPicker").visible)
         compare(nameX("zk"), nameX("rln"))
         verify(nameX("zk") > nameX("delivery"))
@@ -437,6 +462,40 @@ TestCase {
         compare(installSpy.count, 1)
     }
 
+    // A version picked for a package it needs is a change too, and only a
+    // pick is: it used to change that package's row, with nothing to apply it.
+    function test_an_installed_app_installs_a_version_picked_for_a_package_it_needs() {
+        const installedWallet = (signer) => Rows.installed("wallet_ui", {
+            installedVersion: "2.0.0", availableVersions: versions(), selectedVersionIndex: 0,
+            packages: [self({ installedVersion: "2.0.0", rowAction: Types.RowAction.NoOp }),
+                       pkg("signer", Object.assign({ installedVersion: "2.0.0", versions: ["2.0.0", "1.0.0"] },
+                                                   signer))] })
+        let page = makePage(installedWallet({ version: "2.0.0", rowAction: Types.RowAction.NoOp }))
+        compare(find(page, "appManager.details.action").visible, false)
+        page = makePage(installedWallet({ version: "2.1.0", rowAction: Types.RowAction.Upgrade }))
+        compare(find(page, "appManager.details.action").visible, false)
+        page = makePage(installedWallet({ version: "1.0.0", rowAction: Types.RowAction.Downgrade, picked: true }))
+        const action = find(page, "appManager.details.action")
+        verify(action.visible)
+        verify(action.enabled)
+        compare(action.text, "Install")
+        mouseClick(action)
+        compare(installSpy.count, 1)
+    }
+
+    // A package that comes with an optional one lines up with the others:
+    // the whole row sat further right than the rest.
+    function test_a_package_that_comes_with_an_optional_lines_up() {
+        const page = makePage(wallet([self(),
+            pkg("rln", { optional: true, selected: true, offeredBy: "delivery", repositoryUrl: Rows.repo }),
+            pkg("lez_rln", { optional: true, requiredFor: ["rln"], repositoryUrl: Rows.repo })]))
+        const xOf = (row, part) =>
+            find(find(page, "appManager.details.package." + row), part).mapToItem(page, 0, 0).x
+        for (const part of ["packageRow.name", "packageRow.versionPicker"])
+            fuzzyCompare(xOf("lez_rln", part), xOf("rln", part), 0.5)
+        compare(find(find(page, "appManager.details.package.lez_rln"), "packageRow.optional").enabled, false)
+    }
+
     // As the old dialog had it: what the download source can't serve isn't
     // offered.
     function test_only_versions_this_host_can_fetch_are_offered() {
@@ -447,7 +506,7 @@ TestCase {
         compare(picker.model, ["1.0.0", "0.9.0"])
         compare(picker.currentIndex, 0)
         picker.activated(1)
-        compare(versionSpy.signalArguments[0][2], 2)
+        compare(versionSpy.signalArguments[0][2], "0.9.0")
     }
 
     function test_with_nothing_this_host_can_fetch_the_version_is_said() {
@@ -483,5 +542,89 @@ TestCase {
         }))
         compare(find(page, "appManager.details.footer").visible, false)
         compare(find(page, "appManager.details.packagesCount").text, "2 / 2")
+    }
+
+    // ── Who signed it, as Basecamp's install dialog says it ──
+
+    // Under its name, centred: the dialog's mark and words.
+    function test_who_signed_the_app_is_said_under_its_name() {
+        let page = makePage(wallet([self()], { trust: { status: "trusted", publisher: "Logos" } }))
+        let line = find(page, "appManager.details.trust")
+        verify(line.visible)
+        const words = find(line, "trust.lineWords")
+        compare(words.text, "Signed by Logos")
+        const icon = find(line, "trust.markIcon")
+        compare(String(icon.source), String(LogosIcons.check))
+        const name = find(page, "appManager.details.name")
+        const left = icon.mapToItem(page, 0, 0).x
+        const right = words.mapToItem(page, 0, 0).x + words.contentWidth
+        fuzzyCompare((left + right) / 2, name.mapToItem(page, name.width / 2, 0).x, 1)
+        verify(line.mapToItem(page, 0, 0).y >= name.mapToItem(page, 0, name.height).y)
+
+        page = makePage(wallet([self()], { trust: { status: "untrusted", publisher: "Acme" } }))
+        line = find(page, "appManager.details.trust")
+        compare(find(line, "trust.lineWords").text, "Signed by a publisher you don't trust yet")
+        compare(String(find(line, "trust.markIcon").source), String(LogosIcons.warning))
+
+        // Until it is judged, nothing is said.
+        page = makePage(wallet([self()]))
+        compare(find(page, "appManager.details.trust").visible, false)
+    }
+
+    // On a phone a publisher's name as long as one is shown wraps, inside
+    // the panel.
+    function test_who_signed_it_wraps_inside_a_phone_wide_panel() {
+        const page = makePage(wallet([self()], {
+            trust: { status: "trusted", publisher: "Northern Lights Cryptography Research Cooperative of Helsinki Oy" } }))
+        page.width = 360
+        waitForRendering(page)
+        const line = find(page, "appManager.details.trust")
+        const words = find(line, "trust.lineWords")
+        verify(words.lineCount > 1, "lines " + words.lineCount)
+        verify(words.contentWidth <= words.width + 0.5, words.contentWidth + " in " + words.width)
+        const left = line.mapToItem(page, 0, 0).x
+        verify(left >= 0, "left " + left)
+        verify(left + line.width <= page.width, "right " + (left + line.width))
+    }
+
+    // Each package it brings, marked as the dialog marks it, right after
+    // its name.
+    function test_each_package_it_brings_is_marked_with_who_signed_it() {
+        const page = makePage(wallet([
+            self({ trust: { status: "trusted", publisher: "Logos" } }),
+            pkg("signer", { displayName: "Signer", trust: { status: "untrusted", publisher: "Acme" } }),
+            pkg("keys", { installedVersion: "1.0.0", rowAction: Types.RowAction.NoOp,
+                          trust: { status: "unsigned", installed: true } }),
+            pkg("crypto"),
+        ]))
+        const row = (name) => find(page, "appManager.details.package." + name)
+        const mark = (name) => find(row(name), "packageRow.trust")
+        compare(mark("wallet_ui").description, "Signed by Logos")
+        compare(mark("signer").description, "Signed by a publisher you don't trust yet")
+        compare(mark("keys").description, "Already installed, not signed")
+        verify(mark("signer").visible)
+        compare(mark("crypto").visible, false)
+        // Where its name's text ends, not its box.
+        const name = find(row("signer"), "packageRow.name")
+        fuzzyCompare(mark("signer").mapToItem(page, 0, 0).x,
+                     name.mapToItem(page, name.contentWidth, 0).x + Theme.spacing.small, 1)
+    }
+
+    // Its words on hover, or a tap where nothing hovers.
+    function test_a_mark_says_its_words_on_hover_or_a_tap() {
+        const mark = createTemporaryObject(markComp, testCase, { x: 40, y: 40, verdict: { status: "unsigned" } })
+        waitForRendering(mark)
+        const tip = find(mark, "trust.markTip")
+        compare(tip.text, "Not signed: nobody vouches for it")
+        compare(tip.visible, false)
+        mouseMove(mark, mark.width / 2, mark.height / 2)
+        tryCompare(tip, "visible", true)
+        mouseMove(testCase, 400, 400)
+        tryCompare(tip, "visible", false)
+        mouseClick(mark, mark.width / 2, mark.height / 2)
+        mouseMove(testCase, 400, 400)
+        // Past a closing tip's fade: it stays.
+        wait(500)
+        verify(tip.visible)
     }
 }

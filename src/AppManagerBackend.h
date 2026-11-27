@@ -44,10 +44,9 @@ public:
     void refresh() override;
     bool install(QString name, QString repositoryUrl) override;
     bool uninstall(QString name, QString repositoryUrl) override;
-    bool showByName(QString name) override;
     void showDetails(QString name, QString repositoryUrl) override;
     void closeDetails() override;
-    void selectVersion(QString name, QString repositoryUrl, int versionIndex) override;
+    void selectVersion(QString name, QString repositoryUrl, QString version) override;
     void setOptional(QString name, bool selected) override;
 
 private:

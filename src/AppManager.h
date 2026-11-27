@@ -5,6 +5,7 @@
 
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
@@ -85,6 +86,9 @@ public:
     int localCount() const;
 
     bool loading() const;
+    // The catalog has been read once; what the last read couldn't read, or "".
+    bool loaded() const;
+    QString loadError() const;
     bool online() const;
     QString downloadSource() const;
     QString storageState() const;
@@ -96,19 +100,19 @@ public:
     // install() does what the app's row offers: install it, upgrade,
     // downgrade or reinstall it to the version it shows, or bring in what
     // it is missing.
+    // Only an app (ui_qml, not the shell) installs, uninstalls or opens its
+    // details, and installs or opens only from a repository that is enabled.
     bool install(const QString& name, const QString& repositoryUrl);
-    // `name` asked for by name: its details, from the first repository that
-    // has it as an app; the person's own click on Install asks Basecamp.
-    // False when none has it.
-    bool showByName(const QString& name);
     bool uninstall(const QString& name, const QString& repositoryUrl);
 
     // An intent this app provides, delivered through intents_module:
-    // packages.install {name}, answered through `respond` once taken on (an
-    // app just started waits for its catalog): showByName(), and for
-    // Basecamp's own request (`requester` main_ui), the person's click there,
-    // install() too; apps.search {query}, the page searching for it. False
-    // for an intent it doesn't provide.
+    // apps.install {name, repositoryUrl}, answered through `respond` once
+    // taken on (an app just started waits for its catalog): its details, from
+    // `repositoryUrl` when it has it as an app (the one it was picked from),
+    // else the first repository that does, and for Basecamp's own request
+    // (`requester` main_ui), the person's click there, install() too;
+    // apps.search {query}, the page searching for it. False for an intent it
+    // doesn't provide.
     using Respond = std::function<void(bool ok, const QString& error)>;
     static bool provides(const QString& intent);
     bool deliver(const QString& intent, const QVariantMap& params, const QString& requester,
@@ -120,17 +124,22 @@ public:
     void closeDetails();
     // Every role of the open app's row, by name, and `packages`: what it
     // brings (PackageModel::packagesBroughtBy()), an optional one's `selected`
-    // included. Empty with none open.
+    // included, each with `trust`: who signed it, as Basecamp's install dialog
+    // judges it (trustOfBrought()), once the keyring has answered. The app's
+    // own is `trust` too, as what it is. Empty with none open.
     QVariantMap details() const { return m_details; }
     // The version of the open app (its row's), or of a package it brings, and
     // whether an optional package comes with it: they go to Basecamp with the
     // open app's install, which plans with them. Forgotten when the details
     // close.
-    void selectVersion(const QString& name, const QString& repositoryUrl, int versionIndex);
+    void selectVersion(const QString& name, const QString& repositoryUrl, const QString& version);
     void setOptional(const QString& name, bool selected);
 
 signals:
     void loadingChanged();
+    void loadStateChanged();
+    // Every read that failed, `error` as loadError() has it.
+    void loadFailed(const QString& error);
     void onlineChanged();
     void downloadStateChanged();
     void hostVariantChanged();
@@ -148,22 +157,33 @@ private:
     struct Delivery {
         int id = 0;
         QString name;
+        QString repositoryUrl;
         bool install = false;
         Respond respond;
     };
 
     int rowOf(const QString& name, const QString& repositoryUrl) const;
-    // showByName(), and with `install`, install() too.
-    bool openByName(const QString& name, bool install);
+    // `name`'s details, from `repositoryUrl` when it has it as an app, else
+    // the first repository that does, and with `install`, install() too.
+    bool openByName(const QString& name, bool install, const QString& repositoryUrl = {});
+    // An app: ui_qml, and not the shell.
+    static bool isApp(const QVariantMap& row);
+    // From a repository that is enabled, or from a file.
+    bool fromEnabledSource(const QVariantMap& row) const;
     void takeDeliveries();
     void applyRepositories();
     void refreshDetails();
+    // Who the person trusts (PackageModules::listTrustedKeys()), read again
+    // for each details shown and after what is installed changes: trusting a
+    // publisher comes with an install.
+    void readTrustedKeys();
     // The open details' picks, for its install ({versions, optional}), and
     // putting them back as they were.
     QVariantMap choicesFor(const QString& name, const QString& repositoryUrl) const;
     void forgetPicks();
-    // The optional packages ticked in its open details change something.
-    bool optionalChangesPending(const QString& name, const QString& repositoryUrl) const;
+    // Its open details change something: an optional package ticked, or a
+    // version picked for one it needs.
+    bool changesPending(const QString& name, const QString& repositoryUrl) const;
 
     logos::installer::PackageModel* m_model;
     logos::installer::InstallProgress* m_progress;
@@ -173,9 +193,14 @@ private:
     logos::installer::IconFetcher* m_icons;
     logos::installer::CatalogClient* m_catalog = nullptr;
     logos::installer::Installer* m_installer = nullptr;
+    logos::installer::PackageModules* m_packages = nullptr;
+    QVariantList m_trustedKeys;
+    bool m_keysRead = false;      // the last answer read it
+    bool m_keysAnswered = false;  // any answer came
     int m_debounceMs = -1;
     int m_clearDelayMs = -1;
 
+    QSet<QString> m_disabledRepositories;
     QString m_category;
     QStringList m_categories{QStringLiteral("All")};
     QList<Delivery> m_deliveries;

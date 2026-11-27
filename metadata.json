@@ -26,9 +26,10 @@
   ],
   "provides": [
     {
-      "intent": "packages.install",
+      "intent": "apps.install",
       "handoff": true,
-      "params": [{"name": "name", "type": "string", "required": true}]
+      "params": [{"name": "name", "type": "string", "required": true},
+                 {"name": "repositoryUrl", "type": "string", "required": false}]
     },
     {
       "intent": "apps.search",
@@ -43,7 +44,9 @@
   },
   "nix": {
     "packages": {
-      "build": [],
+      "build": [
+        "icu"
+      ],
       "runtime": [
         "qt6.qtdeclarative"
       ]

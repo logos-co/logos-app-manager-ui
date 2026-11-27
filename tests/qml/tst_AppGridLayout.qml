@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
 
+import Logos.Theme
+
 import "../../src/qml"
 import "../../src/qml/Installer/Types.js" as Types
 import "Rows.js" as Rows
@@ -188,6 +190,24 @@ TestCase {
         verify(fakeImages.asked.indexOf(testCase.iconData) >= 0, "asked SandboxImages for it")
     }
 
+    // An app without an icon has no colour of its own, installed or not, as
+    // Basecamp's sidebar shows it.
+    function test_a_tile_without_an_icon_has_no_colour_of_its_own_data() {
+        return [{ tag: "grid", comp: gridDelegateComp }, { tag: "list", comp: listDelegateComp }]
+    }
+
+    function test_a_tile_without_an_icon_has_no_colour_of_its_own(data) {
+        for (const installed of [false, true]) {
+            const delegate = createTemporaryObject(data.comp, testCase, {
+                width: 200, height: 162,
+                appData: Rows.app("wallet_ui", { isInstalled: installed }),
+            })
+            const icon = findByObjectName(delegate, "appManager.tileIcon")
+            verify(Qt.colorEqual(icon.fallbackColor, Theme.palette.surfaceRaised),
+                   "installed " + installed + ": " + icon.fallbackColor)
+        }
+    }
+
     function test_an_icon_shows_from_its_url_outside_basecamp() {
         var delegate = createTemporaryObject(gridDelegateComp, testCase, {
             width: 200, height: 162,
@@ -303,6 +323,26 @@ TestCase {
         var badge = findByObjectName(tile, "appGridStateBadge");
         verify(badge.visible);
         compare(badge.text, "Failed");
+    }
+
+    // Waiting behind another install, before Basecamp is asked: Queued, on
+    // the tile and on the list row. It said "Installing…".
+    function test_a_request_waiting_its_turn_says_queued() {
+        var tile = gridTile({
+            isInstalled: false, installStatus: Types.InstallStatus.NotInstalled,
+            planInstallStage: Types.InstallStage.Queued,
+        });
+        var badge = findByObjectName(tile, "appGridStateBadge");
+        verify(badge.visible);
+        compare(badge.text, "Queued");
+        var data = appData("wallet", "Wallet");
+        data.isInstalled = false;
+        data.installStatus = Types.InstallStatus.NotInstalled;
+        data.planInstallStage = Types.InstallStage.Queued;
+        var row = createTemporaryObject(listDelegateComp, testCase.Window.window.contentItem, {
+            width: 600, height: 56, appData: data,
+        });
+        compare(findByObjectName(row, "appListStateBadge").text, "Queued");
     }
 
     function test_an_app_with_nothing_for_this_platform_says_so() {

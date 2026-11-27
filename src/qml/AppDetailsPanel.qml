@@ -8,22 +8,21 @@ import Logos.Layouts
 import Logos.Theme
 
 import "Installer/Downloads.js" as Downloads
-import "Installer/MonogramColor.js" as MonogramColor
 import "Installer/Stages.js" as Stages
 import "Installer/Types.js" as Types
 import "Icons.js" as Icons
 
 // One app, beside the list as Package Manager shows a package: what it is,
-// its version, what installing it brings, each at the version picked on its
-// row, and what can be done with it: open it, install, upgrade, downgrade or
-// reinstall it at that version, or remove it. Basecamp approves each change;
-// this panel only asks.
+// who signed it, its version, what installing it brings, each at the version
+// picked on its row, and what can be done with it: open it, install, upgrade,
+// downgrade or reinstall it at that version, or remove it. Basecamp approves
+// each change; this panel only asks.
 Rectangle {
     id: root
     objectName: "appManager.details"
 
-    // The app's row, every role by name, and `packages`, what it brings: the
-    // backend's `details`.
+    // The app's row, every role by name, `packages`, what it brings, and
+    // `trust`, who signed it: the backend's `details`.
     property var app: ({})
     // Beside the list it has its own title and ✕; as the page (a phone) the
     // side panel's bar is the way back.
@@ -37,7 +36,7 @@ Rectangle {
     signal installRequested(string name, string repositoryUrl)
     signal uninstallRequested(string name, string repositoryUrl)
     // Of the app or of a package it brings.
-    signal versionPicked(string name, string repositoryUrl, int versionIndex)
+    signal versionPicked(string name, string repositoryUrl, string version)
     signal optionalToggled(string name, bool selected)
 
     color: Theme.palette.surfaceRaised
@@ -93,9 +92,11 @@ Rectangle {
         readonly property bool unresolved: required.some(p => !p.found || p.conflict === true)
         // Another install is bringing one of them: wait for it.
         readonly property bool waiting: !installing && installingCount > 0
-        // An optional package ticked, or what comes with one, would change.
-        readonly property bool optionalChanges:
+        // An optional package ticked, or what comes with one, would change, or
+        // one it needs at the version picked.
+        readonly property bool pendingChanges:
             optional.some(p => (p.offeredBy === undefined || p.selected === true) && changes(p.rowAction))
+            || required.some(p => p.picked === true && !p.subject && changes(p.rowAction))
         readonly property real downloadBytes: changing.reduce((sum, p) => sum + (Number(p.size) || 0), 0)
 
         // What installing it does, in the Add Application dialog's words.
@@ -211,9 +212,8 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         label: d.displayName
                         source: Icons.shown(root.sandboxImages, d.app.iconUrl || "")
-                        fallbackColor: d.installed
-                                       ? Theme.palette.background
-                                       : MonogramColor.colorForApp(d.name) || Theme.palette.background
+                        // No colour of its own; the panel is surfaceRaised.
+                        fallbackColor: Theme.palette.background
                         tileSize: 64
                         insetArtwork: d.app.supportsFullBleedIcon !== true
                         interactive: false
@@ -228,6 +228,16 @@ Rectangle {
                         font.pixelSize: Theme.typography.primaryText
                         font.weight: Theme.typography.weightMedium
                         color: Theme.palette.text
+                    }
+
+                    // Who signed it, as Basecamp's install dialog says it:
+                    // centred at its own width, wrapped where that's too wide.
+                    TrustLine {
+                        objectName: "appManager.details.trust"
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: Math.ceil(implicitWidth)
+                        verdict: d.app.trust
                     }
                 }
 
@@ -334,8 +344,8 @@ Rectangle {
                             Layout.fillWidth: true
                             row: modelData
                             installing: d.installing
-                            onVersionPicked: (name, repositoryUrl, index) =>
-                                root.versionPicked(name, repositoryUrl, index)
+                            onVersionPicked: (name, repositoryUrl, version) =>
+                                root.versionPicked(name, repositoryUrl, version)
                             onOptionalToggled: (name, selected) => root.optionalToggled(name, selected)
                         }
                     }
@@ -371,8 +381,8 @@ Rectangle {
                             Layout.fillWidth: true
                             row: modelData
                             installing: d.installing
-                            onVersionPicked: (name, repositoryUrl, index) =>
-                                root.versionPicked(name, repositoryUrl, index)
+                            onVersionPicked: (name, repositoryUrl, version) =>
+                                root.versionPicked(name, repositoryUrl, version)
                             onOptionalToggled: (name, selected) => root.optionalToggled(name, selected)
                         }
                     }
@@ -450,9 +460,9 @@ Rectangle {
                     id: actionButton
                     objectName: "appManager.details.action"
                     // Nothing to change: Open is the only thing to do. An
-                    // installed app installs the optional packages ticked.
+                    // installed app installs what its details changed.
                     visible: d.installing || (d.repositoryUrl.length > 0
-                                              && (d.action !== Types.RowAction.NoOp || d.optionalChanges))
+                                              && (d.action !== Types.RowAction.NoOp || d.pendingChanges))
                     enabled: !d.installing && d.available && !d.unresolved && !d.waiting
                     text: d.installing ? Stages.stageWord(d.stage)
                         : Stages.actionWord(d.action !== Types.RowAction.NoOp ? d.action : Types.RowAction.Install)

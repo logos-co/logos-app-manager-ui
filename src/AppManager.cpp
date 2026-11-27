@@ -7,9 +7,12 @@
 #include <logos/installer/OnlineWatch.h>
 #include <logos/installer/PackageFilter.h>
 #include <logos/installer/PackageModel.h>
+#include <logos/installer/PackageModules.h>
 #include <logos/installer/PackageRows.h>
+#include <logos/installer/PackageTrust.h>
 #include <logos/installer/RowState.h>
 
+#include <QPointer>
 #include <QTimer>
 
 #include <utility>
@@ -21,7 +24,7 @@ using namespace logos::installer;
 namespace {
 
 const QString kAll = QStringLiteral("All");
-const QString kPackagesInstall = QStringLiteral("packages.install");
+const QString kAppsInstall = QStringLiteral("apps.install");
 const QString kAppsSearch = QStringLiteral("apps.search");
 const QString kLocal = QStringLiteral("local");
 const QString kShell = QStringLiteral("main_ui");
@@ -86,6 +89,7 @@ AppManager::~AppManager() = default;
 void AppManager::setModules(PackageModules* packages, InstallModules* installs, Consent* consent)
 {
     if (m_catalog) return;
+    m_packages = packages;
     m_catalog = new CatalogClient(packages, m_model, this);
     if (m_debounceMs >= 0) m_catalog->setDebounceInterval(m_debounceMs);
     m_installer = new Installer(installs, consent, m_progress, this);
@@ -94,6 +98,11 @@ void AppManager::setModules(PackageModules* packages, InstallModules* installs, 
 
     connect(m_catalog, &CatalogClient::loadingChanged, this, &AppManager::loadingChanged);
     connect(m_catalog, &CatalogClient::loaded, this, &AppManager::takeDeliveries);
+    connect(m_catalog, &CatalogClient::loaded, this, &AppManager::loadStateChanged);
+    connect(m_catalog, &CatalogClient::loadFailed, this, [this] {
+        emit loadStateChanged();
+        emit loadFailed(m_catalog->loadError());
+    });
     connect(m_catalog, &CatalogClient::repositoriesChanged, this, [this] {
         applyRepositories();
         emit repositoriesChanged();
@@ -143,6 +152,7 @@ void AppManager::refresh()
 void AppManager::onPackagesChanged()
 {
     if (m_catalog) m_catalog->onPackagesChanged();
+    if (!m_detailsName.isEmpty()) readTrustedKeys();
 }
 
 void AppManager::onCatalogChanged()
@@ -250,6 +260,16 @@ bool AppManager::loading() const
     return m_catalog && m_catalog->isLoading();
 }
 
+bool AppManager::loaded() const
+{
+    return m_catalog && m_catalog->hasLoaded();
+}
+
+QString AppManager::loadError() const
+{
+    return m_catalog ? m_catalog->loadError() : QString();
+}
+
 bool AppManager::online() const
 {
     return m_online->isOnline();
@@ -281,6 +301,7 @@ bool AppManager::install(const QString& name, const QString& repositoryUrl)
     const int row = rowOf(name, repositoryUrl);
     if (row < 0) return false;
     const QVariantMap r = m_model->rowAt(row);
+    if (!isApp(r) || !fromEnabledSource(r)) return false;
     const QString repo = str(r, "repositoryUrl");
     // Installed from a file: no repository to install from.
     if (repo.isEmpty()) return false;
@@ -311,8 +332,8 @@ bool AppManager::install(const QString& name, const QString& repositoryUrl)
         return true;
     case RowAction::NoOp:
         // Current itself: an install brings what it is missing, what its
-        // dependencies need, and the optional packages ticked in its details.
-        if (!canInstall || (status == InstallStatus::Installed && !optionalChangesPending(name, repo)))
+        // dependencies need, and what its details changed (changesPending()).
+        if (!canInstall || (status == InstallStatus::Installed && !changesPending(name, repo)))
             return false;
         m_installer->install(name, version, repo, choices);
         return true;
@@ -321,18 +342,16 @@ bool AppManager::install(const QString& name, const QString& repositoryUrl)
     }
 }
 
-bool AppManager::showByName(const QString& name)
-{
-    return openByName(name, false);
-}
-
-bool AppManager::openByName(const QString& name, bool andInstall)
+bool AppManager::openByName(const QString& name, bool andInstall, const QString& repositoryUrl)
 {
     if (name.isEmpty() || name == kShell || !m_catalog) return false;
-    for (const QString& key : m_catalog->sourceOrder()) {
+    // The repository it was picked from, before the rest.
+    QStringList order = m_catalog->sourceOrder();
+    if (order.removeAll(repositoryUrl) > 0) order.prepend(repositoryUrl);
+    for (const QString& key : order) {
         const int row = key == kLocal ? -1 : m_model->rowOf(name, key);
         // Apps only, as the page lists them.
-        if (row < 0 || str(m_model->rowAt(row), "type") != QLatin1String("ui_qml")) continue;
+        if (row < 0 || !isApp(m_model->rowAt(row)) || !fromEnabledSource(m_model->rowAt(row))) continue;
         // The person sees what was asked for, installed already or not.
         showDetails(name, key);
         if (andInstall) install(name, key);
@@ -348,7 +367,7 @@ bool AppManager::uninstall(const QString& name, const QString& repositoryUrl)
     if (row < 0) return false;
     const QVariantMap r = m_model->rowAt(row);
     const auto status = static_cast<InstallStatus>(r.value(QStringLiteral("installStatus")).toInt());
-    if (str(r, "installType") != QLatin1String("user") || !isInstalledRow(r)
+    if (!isApp(r) || str(r, "installType") != QLatin1String("user") || !isInstalledRow(r)
         || status == InstallStatus::Installing)
         return false;
     m_installer->uninstall({name});
@@ -357,7 +376,7 @@ bool AppManager::uninstall(const QString& name, const QString& repositoryUrl)
 
 bool AppManager::provides(const QString& intent)
 {
-    return intent == kPackagesInstall || intent == kAppsSearch;
+    return intent == kAppsInstall || intent == kAppsSearch;
 }
 
 bool AppManager::deliver(const QString& intent, const QVariantMap& params, const QString& requester,
@@ -371,16 +390,18 @@ bool AppManager::deliver(const QString& intent, const QVariantMap& params, const
         return true;
     }
     const QString name = params.value(QStringLiteral("name")).toString();
+    // Where it was picked, when the request says: two repositories can list it.
+    const QString repositoryUrl = params.value(QStringLiteral("repositoryUrl")).toString();
     // Basecamp's own request is the person's click there. Another app's only
     // shows the app: its install is the person's to ask for, here.
     const bool andInstall = requester == kShell;
     if (m_catalog && m_catalog->hasLoaded() && !m_catalog->isLoading()) {
-        const bool taken = openByName(name, andInstall);
+        const bool taken = openByName(name, andInstall, repositoryUrl);
         respond(taken, taken ? QString() : QStringLiteral("failed"));
         return true;
     }
     const int id = ++m_nextDelivery;
-    m_deliveries.append({id, name, andInstall, std::move(respond)});
+    m_deliveries.append({id, name, repositoryUrl, andInstall, std::move(respond)});
     QTimer::singleShot(m_deliveryTimeoutMs, this, [this, id] {
         for (int i = 0; i < m_deliveries.size(); ++i) {
             if (m_deliveries.at(i).id != id) continue;
@@ -396,17 +417,20 @@ void AppManager::takeDeliveries()
 {
     const QList<Delivery> waiting = std::exchange(m_deliveries, {});
     for (const Delivery& d : waiting) {
-        const bool taken = openByName(d.name, d.install);
+        const bool taken = openByName(d.name, d.install, d.repositoryUrl);
         d.respond(taken, taken ? QString() : QStringLiteral("failed"));
     }
 }
 
 void AppManager::showDetails(const QString& name, const QString& repositoryUrl)
 {
+    const int row = rowOf(name, repositoryUrl);
+    if (row < 0 || !isApp(m_model->rowAt(row)) || !fromEnabledSource(m_model->rowAt(row))) return;
     if (name != m_detailsName || repositoryUrl != m_detailsRepositoryUrl) forgetPicks();
     m_detailsName = name;
     m_detailsRepositoryUrl = repositoryUrl;
     refreshDetails();
+    readTrustedKeys();
 }
 
 void AppManager::closeDetails()
@@ -417,19 +441,24 @@ void AppManager::closeDetails()
     refreshDetails();
 }
 
-void AppManager::selectVersion(const QString& name, const QString& repositoryUrl, int versionIndex)
+void AppManager::selectVersion(const QString& name, const QString& repositoryUrl, const QString& version)
 {
     const int row = rowOf(name, repositoryUrl);
-    if (row < 0) return;
+    if (row < 0 || version.isEmpty()) return;
+    // By its name, not its place: a list that changed since the view showed
+    // it moves the place. One it no longer lists is no pick.
+    const QVariantList versions = m_model->rowAt(row).value(QStringLiteral("availableVersions")).toList();
+    int index = -1;
+    for (int i = 0; i < versions.size() && index < 0; ++i)
+        if (versions.at(i).toMap().value(QStringLiteral("version")).toString() == version) index = i;
+    if (index < 0) return;
     // The app's own version is its row's, as its tile shows it; another
     // package's is only the details'.
     if (name == m_detailsName || m_detailsName.isEmpty()) {
-        m_model->selectVersion(row, versionIndex);
+        m_model->selectVersion(row, index);
         return;
     }
-    const QString version = m_model->rowAt(row).value(QStringLiteral("availableVersions")).toList()
-                                .value(versionIndex).toMap().value(QStringLiteral("version")).toString();
-    if (version.isEmpty() || m_versions.value(name).toString() == version) return;
+    if (m_versions.value(name).toString() == version) return;
     m_versions.insert(name, version);
     refreshDetails();
 }
@@ -465,17 +494,23 @@ void AppManager::forgetPicks()
 {
     m_optional.clear();
     m_versions.clear();
+    // The app's own version is picked on its row: back to the newest, as its
+    // tile shows it.
+    const int row = rowOf(m_detailsName, m_detailsRepositoryUrl);
+    if (row >= 0) m_model->selectVersion(row, 0);
 }
 
-bool AppManager::optionalChangesPending(const QString& name, const QString& repositoryUrl) const
+bool AppManager::changesPending(const QString& name, const QString& repositoryUrl) const
 {
     if (name != m_detailsName || repositoryUrl != str(m_details, "repositoryUrl")) return false;
     for (const QVariant& v : m_details.value(QStringLiteral("packages")).toList()) {
         const QVariantMap p = v.toMap();
-        // Ticked, or coming with one that is.
-        if (!p.value(QStringLiteral("optional")).toBool()
-            || (p.contains(QStringLiteral("selected")) && !p.value(QStringLiteral("selected")).toBool()))
-            continue;
+        // An optional one ticked, or coming with one that is; one it needs, at
+        // the version picked.
+        const bool asked = p.value(QStringLiteral("optional")).toBool()
+            ? !(p.contains(QStringLiteral("selected")) && !p.value(QStringLiteral("selected")).toBool())
+            : p.value(QStringLiteral("picked")).toBool() && !p.value(QStringLiteral("subject")).toBool();
+        if (!asked) continue;
         switch (static_cast<RowAction>(p.value(QStringLiteral("rowAction")).toInt())) {
         case RowAction::Install:
         case RowAction::Upgrade:
@@ -513,7 +548,33 @@ void AppManager::applyRepositories()
         const QVariantMap r = v.toMap();
         if (!r.value(QStringLiteral("enabled"), true).toBool()) hidden << str(r, "url");
     }
+    m_disabledRepositories = QSet<QString>(hidden.cbegin(), hidden.cend());
     m_sections->setHidden(hidden);
+}
+
+bool AppManager::isApp(const QVariantMap& row)
+{
+    return str(row, "type") == QLatin1String("ui_qml") && str(row, "name") != kShell;
+}
+
+bool AppManager::fromEnabledSource(const QVariantMap& row) const
+{
+    const QString repositoryUrl = str(row, "repositoryUrl");
+    return repositoryUrl.isEmpty() || !m_disabledRepositories.contains(repositoryUrl);
+}
+
+void AppManager::readTrustedKeys()
+{
+    if (!m_packages) return;
+    QPointer<AppManager> self(this);
+    m_packages->listTrustedKeys([self](const QVariantList& keys, bool read) {
+        if (!self || (self->m_keysAnswered && keys == self->m_trustedKeys && read == self->m_keysRead))
+            return;
+        self->m_trustedKeys = keys;
+        self->m_keysRead = read;
+        self->m_keysAnswered = true;
+        self->refreshDetails();
+    });
 }
 
 void AppManager::refreshDetails()
@@ -522,7 +583,22 @@ void AppManager::refreshDetails()
     const int row = rowOf(m_detailsName, m_detailsRepositoryUrl);
     if (row >= 0) {
         details = m_model->rowAt(row);
-        details.insert(QStringLiteral("packages"), m_model->packagesBroughtBy(row, m_optional, m_versions));
+        QVariantList packages = m_model->packagesBroughtBy(row, m_optional, m_versions);
+        // Nothing said of who signed what until the keyring answers.
+        if (m_keysAnswered) {
+            const QVariantMap trust =
+                trustOfBrought(*m_model, packages, m_trustedKeys, m_keysRead, m_detailsName);
+            for (QVariant& v : packages) {
+                QVariantMap p = v.toMap();
+                p.insert(QStringLiteral("trust"), trust.value(str(p, "name")));
+                v = p;
+            }
+            // Who signed the app: what it is, not a row a plan leaves as it is.
+            QVariantMap own = trust.value(m_detailsName).toMap();
+            own.remove(QStringLiteral("installed"));
+            details.insert(QStringLiteral("trust"), own);
+        }
+        details.insert(QStringLiteral("packages"), packages);
     } else if (!m_detailsName.isEmpty()) {
         // Gone from every list: closed for good, not reopened if it comes back.
         forgetPicks();

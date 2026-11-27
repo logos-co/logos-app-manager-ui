@@ -23,6 +23,7 @@ public:
     void getStorageState(std::function<void(const QVariantMap&)> done) override;
     void getInstalledPackages(std::function<void(const QVariantList&, bool)> done) override;
     void getValidVariants(std::function<void(const QStringList&, bool)> done) override;
+    void listTrustedKeys(std::function<void(const QVariantList&, bool)> done) override;
 
     void downloadPinned(const QString& repositoryUrl, const QString& name, const QString& version,
                         const QString& rootHash,
