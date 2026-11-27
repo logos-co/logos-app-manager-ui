@@ -1,0 +1,10 @@
+# Literals no design-system token fits. Each line is
+# "<path ending>: <line text>", the reason after " # ".
+src/qml/AppDetailsPanel.qml: iconSize: 14 # no 14 px icon token
+src/qml/AppListDelegate.qml: iconSize: 18 # no 18 px icon token
+src/qml/AppManagerPanelHeader.qml: leadingIcon.size: 18 # no 18 px icon token
+src/qml/AppManagerPanelHeader.qml: spacing: 24 # between the view switcher's label and buttons; no 24 px spacing token
+src/qml/AppManagerPanelHeader.qml: Layout.preferredHeight: 36 # the view switcher's row, not a control
+src/qml/AppManagerView.qml: implicitWidth: 36 # the loading spinner, not a control
+src/qml/AppManagerView.qml: implicitHeight: 36 # the loading spinner, not a control
+src/qml/PackageRow.qml: spacing: 2 # a row's name and detail lines; no 2 px spacing token

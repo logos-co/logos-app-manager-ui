@@ -67,10 +67,10 @@ LogosItemLayout {
                 id: filterButton
                 objectName: "appManager.filterButton"
                 Layout.alignment: Qt.AlignVCenter
-                Layout.preferredWidth: 40
-                Layout.preferredHeight: 40
-                size: 40
-                iconSize: 16
+                Layout.preferredWidth: Theme.size.controlLarge
+                Layout.preferredHeight: Theme.size.controlLarge
+                size: Theme.size.controlLarge
+                iconSize: Theme.size.iconSmall
                 iconSource: LogosIcons.filter
                 iconColor: root.showUnavailable
                            ? Theme.palette.primary
@@ -109,7 +109,7 @@ LogosItemLayout {
             LogosButton {
                 objectName: "appManager.reloadButton"
                 Layout.preferredWidth: 100
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: Theme.size.controlLarge
                 radius: Theme.spacing.radiusLarge
                 text: qsTr("Reload")
                 leadingIcon.source: LogosIcons.refresh
@@ -120,7 +120,7 @@ LogosItemLayout {
 
             LogosButton {
                 objectName: "appManager.repositoriesButton"
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: Theme.size.controlLarge
                 radius: Theme.spacing.radiusLarge
                 text: qsTr("Manage Repositories")
                 onClicked: root.repositoriesClicked()
@@ -140,8 +140,8 @@ LogosItemLayout {
                 LogosIconButton {
                     objectName: "appManager.gridViewButton"
                     iconSource: LogosIcons.grid
-                    size: 20
-                    iconSize: 20
+                    size: Theme.size.iconMedium
+                    iconSize: Theme.size.iconMedium
                     iconColor: root.viewMode === "grid"
                                ? Theme.palette.text
                                : Theme.palette.textTertiary
@@ -152,8 +152,8 @@ LogosItemLayout {
                 LogosIconButton {
                     objectName: "appManager.listViewButton"
                     iconSource: LogosIcons.list
-                    size: 20
-                    iconSize: 20
+                    size: Theme.size.iconMedium
+                    iconSize: Theme.size.iconMedium
                     iconColor: root.viewMode === "list"
                                ? Theme.palette.text
                                : Theme.palette.textTertiary

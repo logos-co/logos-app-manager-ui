@@ -48,7 +48,7 @@ ColumnLayout {
 
     Rectangle {
         Layout.fillWidth: true
-        Layout.preferredHeight: 1
+        Layout.preferredHeight: Theme.size.borderWidth
         Layout.topMargin: Theme.spacing.medium
         Layout.bottomMargin: Theme.spacing.medium
         color: Theme.palette.borderSubtle

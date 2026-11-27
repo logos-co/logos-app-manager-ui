@@ -77,6 +77,7 @@ their own under it.
 nix build                                           # the module
 nix build .#checks.aarch64-linux.unit-tests         # the backend's logic, on fakes
 nix build .#checks.aarch64-linux.shared-installer-words
+nix build .#checks.aarch64-linux.theme-literals
 nix run .#qml-tests                                 # the views, on Basecamp's design system
 ```
 
@@ -93,6 +94,9 @@ To try a basecamp-installer-common change, add
 - **shared-installer-words**: `src/qml/Installer` is the pinned library's,
   and no screen writes out a phrase the library says. A word that only looks
   shared goes in `tests/shared-words-allow.txt`, with why.
+- **theme-literals**: the views take colours and sizes from the design
+  system's `Theme`. A literal no token fits goes in
+  `tests/theme-literals-allow.txt`, with why.
 
 ## License
 

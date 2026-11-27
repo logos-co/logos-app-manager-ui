@@ -291,10 +291,10 @@ ItemDelegate {
         // ⋯ holds it.
         LogosIconButton {
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
+            Layout.preferredWidth: Theme.size.controlSmall
+            Layout.preferredHeight: Theme.size.controlSmall
             visible: d.canUninstall && !Theme.touch
-            size: 32
+            size: Theme.size.controlSmall
             iconSize: 18
             iconSource: LogosIcons.trash
             background: Item {}
