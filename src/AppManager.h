@@ -97,18 +97,15 @@ public:
     // downgrade or reinstall it to the version it shows, or bring in what
     // it is missing.
     bool install(const QString& name, const QString& repositoryUrl);
-    // `name` asked for by name: its details, from the first repository that
-    // has it as an app; the person's own click on Install asks Basecamp.
-    // False when none has it.
-    bool showByName(const QString& name);
     bool uninstall(const QString& name, const QString& repositoryUrl);
 
     // An intent this app provides, delivered through intents_module:
     // packages.install {name}, answered through `respond` once taken on (an
-    // app just started waits for its catalog): showByName(), and for
-    // Basecamp's own request (`requester` main_ui), the person's click there,
-    // install() too; apps.search {query}, the page searching for it. False
-    // for an intent it doesn't provide.
+    // app just started waits for its catalog): its details, from the first
+    // repository that has it as an app, and for Basecamp's own request
+    // (`requester` main_ui), the person's click there, install() too;
+    // apps.search {query}, the page searching for it. False for an intent it
+    // doesn't provide.
     using Respond = std::function<void(bool ok, const QString& error)>;
     static bool provides(const QString& intent);
     bool deliver(const QString& intent, const QVariantMap& params, const QString& requester,
@@ -153,7 +150,8 @@ private:
     };
 
     int rowOf(const QString& name, const QString& repositoryUrl) const;
-    // showByName(), and with `install`, install() too.
+    // `name`'s details, from the first repository that has it as an app,
+    // and with `install`, install() too.
     bool openByName(const QString& name, bool install);
     void takeDeliveries();
     void applyRepositories();

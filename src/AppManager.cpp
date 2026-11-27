@@ -321,11 +321,6 @@ bool AppManager::install(const QString& name, const QString& repositoryUrl)
     }
 }
 
-bool AppManager::showByName(const QString& name)
-{
-    return openByName(name, false);
-}
-
 bool AppManager::openByName(const QString& name, bool andInstall)
 {
     if (name.isEmpty() || name == kShell || !m_catalog) return false;

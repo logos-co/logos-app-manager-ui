@@ -69,30 +69,4 @@ Rectangle {
                 toast.show(qsTr("Something went wrong with %1").arg(name), error)
         }
     }
-
-    PackagesInstallRequest {
-        id: installRequest
-        objectName: "appManager.installRequest"
-        backend: root.backend
-    }
-
-    // Provider side, on Basecamp's QML path: packages.install, another app
-    // asking for one, and apps.search.
-    Connections {
-        target: typeof logos !== "undefined" ? logos : null
-        ignoreUnknownSignals: true
-        function onIntentRequested(requestId, intent, params, requesterName) {
-            if (intent === "apps.search") {
-                if (root.backend) root.backend.closeDetails()
-                view.applySearch(params ? String(params.query || "") : "")
-                logos.respond(requestId, true, ({}), "")
-                return
-            }
-            if (intent !== "packages.install") {
-                logos.respond(requestId, false, ({}), "failed")
-                return
-            }
-            installRequest.begin(requestId, params ? String(params.name || "") : "")
-        }
-    }
 }

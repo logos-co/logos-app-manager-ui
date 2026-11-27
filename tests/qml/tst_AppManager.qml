@@ -4,8 +4,8 @@ import QtTest
 import "../../src/qml"
 import "Rows.js" as Rows
 
-// The App Manager as the host loads it: what it asks the shell, the details
-// page, and the provider side of packages.install.
+// The App Manager as the host loads it: what it asks the shell, and the
+// details page.
 TestCase {
     id: testCase
     name: "AppManager"
@@ -18,9 +18,7 @@ TestCase {
     property var backend: null
     property var appsModel: null
     property var logos: QtObject {
-        signal intentRequested(string requestId, string intent, var params, string requesterName)
         property var requests: []
-        property var responses: []
         function module(name) { return name === "app_manager_ui" ? testCase.backend : null }
         function model(name, property, prefetch) {
             return name === "app_manager_ui" && property === "apps" ? testCase.appsModel : null
@@ -29,11 +27,6 @@ TestCase {
             requests = requests.concat([{ intent: intent, params: params }])
             callback({ ok: true })
         }
-        function respond(id, ok, data, error) {
-            responses = responses.concat([{ id: id, ok: ok, error: error }])
-        }
-        // A fake backend answers at once, with a value, not a pending call.
-        function watch(value, onSuccess, onError) { onSuccess(value) }
     }
 
     Component { id: fakeComp; FakeBackend {} }
@@ -48,7 +41,6 @@ TestCase {
                               Rows.app("wallet_ui"), Rows.installed("chat_ui")])
         backend.visibleCount = 2
         logos.requests = []
-        logos.responses = []
     }
 
     function cleanup() {
@@ -113,69 +105,5 @@ TestCase {
         backend.finished("wallet_ui", 2, "the download stopped")
         tryVerify(() => toast.visible)
         compare(toast.message, "the download stopped")
-    }
-
-    // ── packages.install ─────────────────────────────────────────────────────
-
-    // Another app's request shows the app; the person's own click on
-    // Install is what asks Basecamp.
-    function test_packages_install_shows_the_app_and_answers() {
-        makeApp()
-        logos.intentRequested("r1", "packages.install", { name: "wallet_ui" }, "chat_ui")
-        compare(backend.called("showByName"), ["showByName wallet_ui"])
-        compare(backend.called("install").length, 0)
-        compare(logos.responses.length, 1)
-        compare(logos.responses[0].id, "r1")
-        compare(logos.responses[0].ok, true)
-    }
-
-    function test_packages_install_waits_for_the_catalog() {
-        backend.loading = true
-        makeApp()
-        logos.intentRequested("r1", "packages.install", { name: "wallet_ui" }, "chat_ui")
-        compare(logos.responses.length, 0)
-        backend.loading = false
-        compare(backend.called("showByName").length, 1)
-        compare(logos.responses.length, 1)
-        compare(logos.responses[0].ok, true)
-    }
-
-    function test_packages_install_of_nothing_known_fails_in_time() {
-        backend.hasByName = false
-        const app = makeApp()
-        find(app, "appManager.installRequest").timeoutMs = 200
-        logos.intentRequested("r1", "packages.install", { name: "nothing_ui" }, "chat_ui")
-        compare(logos.responses.length, 0)
-        tryVerify(() => logos.responses.length === 1, 2000)
-        compare(logos.responses[0].ok, false)
-        compare(logos.responses[0].error, "failed")
-    }
-
-    function test_a_second_request_displaces_the_first() {
-        backend.loading = true
-        makeApp()
-        logos.intentRequested("r1", "packages.install", { name: "wallet_ui" }, "chat_ui")
-        logos.intentRequested("r2", "packages.install", { name: "chat_ui" }, "chat_ui")
-        compare(logos.responses.length, 1)
-        compare(logos.responses[0].id, "r1")
-        compare(logos.responses[0].error, "cancelled")
-    }
-
-    function test_apps_search_searches_the_page() {
-        const app = makeApp()
-        backend.details = Rows.app("wallet_ui")
-        logos.intentRequested("r1", "apps.search", { query: "wal" }, "main_ui")
-        compare(backend.called("closeDetails").length, 1)
-        compare(find(app, "appManager.searchField").text, "wal")
-        compare(logos.responses.length, 1)
-        compare(logos.responses[0].ok, true)
-    }
-
-    function test_an_intent_it_does_not_provide_is_refused() {
-        makeApp()
-        logos.intentRequested("r1", "packages.show", { name: "wallet_ui" }, "chat_ui")
-        compare(logos.responses.length, 1)
-        compare(logos.responses[0].ok, false)
-        compare(backend.called("showByName").length, 0)
     }
 }

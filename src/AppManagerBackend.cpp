@@ -188,11 +188,6 @@ bool AppManagerBackend::uninstall(QString name, QString repositoryUrl)
     return m_manager->uninstall(name, repositoryUrl);
 }
 
-bool AppManagerBackend::showByName(QString name)
-{
-    return m_manager->showByName(name);
-}
-
 void AppManagerBackend::showDetails(QString name, QString repositoryUrl)
 {
     m_manager->showDetails(name, repositoryUrl);

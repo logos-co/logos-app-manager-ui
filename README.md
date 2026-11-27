@@ -39,7 +39,7 @@ pipeline, and the JavaScript for their words.
 
 | | |
 |---|---|
-| `src/qml/` | The view. `AppManager.qml` is the entry: the apps page (`AppManagerView`), an app's details beside it (`AppDetailsPanel`), and the provider side of `packages.install` |
+| `src/qml/` | The view. `AppManager.qml` is the entry: the apps page (`AppManagerView`) and an app's details beside it (`AppDetailsPanel`) |
 | `src/qml/Installer/` | The library's JavaScript, a copy: `scripts/sync-installer-common.sh` refreshes it, and the `shared-installer-words` check keeps it the pinned revision |
 | `src/app_manager_ui.rep` | What the view reads and asks of the backend |
 | `src/AppManagerBackend.*` | The backend, run as the core module `app_manager_ui_backend`: hands `AppManager` the package modules and Basecamp's consent, forwards the modules' events, mirrors its state into the `.rep` |
@@ -57,7 +57,7 @@ their own under it.
 | | |
 |---|---|
 | Asks Basecamp | `basecamp.packages.confirm_install`, `_upgrade`, `_uninstall` (from the backend); `basecamp.apps.launch` to open an app, `basecamp.repositories.manage` (from the view) |
-| Provides | `packages.install`: an app is asked for by name. App Manager shows it, from the first repository that has it as an app. For Basecamp's own request (the person's click there, e.g. the Welcome page) it also installs it, Basecamp's approval first; for another app's, the person's own click on Install is what asks Basecamp. It answers once the app is shown, not when an install is done |
+| Provides | Delivered to the backend through `intents_module`. `packages.install`: an app is asked for by name. App Manager shows it, from the first repository that has it as an app. For Basecamp's own request (the person's click there, e.g. the Welcome page) it also installs it, Basecamp's approval first; for another app's, the person's own click on Install is what asks Basecamp. It answers once the app is shown, not when an install is done. `apps.search`: the page searches for the query |
 
 ## Build and test
 

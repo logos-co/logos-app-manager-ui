@@ -288,6 +288,15 @@ bool shellAsks(App& a, const QString& name)
     return *taken;
 }
 
+// Another app's request: whether it was taken on at once.
+bool otherAppAsks(App& a, const QString& name)
+{
+    const auto taken = std::make_shared<bool>(false);
+    a.manager.deliver("packages.install", {{"name", name}}, "chat_ui",
+                      [taken](bool ok, const QString&) { *taken = ok; });
+    return *taken;
+}
+
 TEST(basecamps_request_takes_the_default_repository_first) {
     App a;
     a.modules.catalog = {app(kMine, "notes_ui", "1.0.0", "N1"), app(kDefault, "notes_ui", "1.0.0", "N2")};
@@ -298,7 +307,7 @@ TEST(basecamps_request_takes_the_default_repository_first) {
     CHECK_EQ(a.manager.details().value("repositoryUrl").toString(), kDefault);
     for (const QString& name : {QStringLiteral("nothing_ui"), QStringLiteral("main_ui"), QString()}) {
         CHECK(!shellAsks(a, name));
-        CHECK(!a.manager.showByName(name));
+        CHECK(!otherAppAsks(a, name));
     }
 }
 
@@ -356,7 +365,7 @@ TEST(by_name_only_an_app_is_found) {
     App a;
     a.modules.catalog = {catalogRow(kDefault, "signer", "1.0.0", "S", {}, kHere, "core")};
     a.manager.load();
-    CHECK(!a.manager.showByName("signer"));
+    CHECK(!otherAppAsks(a, "signer"));
     Responses r;
     CHECK(a.manager.deliver("packages.install", {{"name", "signer"}}, "main_ui", r.respond()));
     CHECK(!r.got.first().first);

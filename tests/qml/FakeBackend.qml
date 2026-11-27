@@ -25,8 +25,6 @@ QtObject {
     property var details: ({})
 
     property var calls: []
-    // What showByName answers.
-    property bool hasByName: true
 
     function record(call) { calls = calls.concat([call]) }
     function called(prefix) { return calls.filter(c => c.indexOf(prefix) === 0) }
@@ -38,7 +36,6 @@ QtObject {
     function refresh() { record("refresh") }
     function install(name, repositoryUrl) { record("install " + name + " " + repositoryUrl); return true }
     function uninstall(name, repositoryUrl) { record("uninstall " + name + " " + repositoryUrl); return true }
-    function showByName(name) { record("showByName " + name); return hasByName }
     function showDetails(name, repositoryUrl) { record("details " + name + " " + repositoryUrl) }
     function closeDetails() { record("closeDetails"); details = ({}) }
     function selectVersion(name, repositoryUrl, index) { record("selectVersion " + name + " " + index) }
