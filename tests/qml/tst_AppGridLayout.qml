@@ -325,6 +325,26 @@ TestCase {
         compare(badge.text, "Failed");
     }
 
+    // Waiting behind another install, before Basecamp is asked: Queued, on
+    // the tile and on the list row. It said "Installing…".
+    function test_a_request_waiting_its_turn_says_queued() {
+        var tile = gridTile({
+            isInstalled: false, installStatus: Types.InstallStatus.NotInstalled,
+            planInstallStage: Types.InstallStage.Queued,
+        });
+        var badge = findByObjectName(tile, "appGridStateBadge");
+        verify(badge.visible);
+        compare(badge.text, "Queued");
+        var data = appData("wallet", "Wallet");
+        data.isInstalled = false;
+        data.installStatus = Types.InstallStatus.NotInstalled;
+        data.planInstallStage = Types.InstallStage.Queued;
+        var row = createTemporaryObject(listDelegateComp, testCase.Window.window.contentItem, {
+            width: 600, height: 56, appData: data,
+        });
+        compare(findByObjectName(row, "appListStateBadge").text, "Queued");
+    }
+
     function test_an_app_with_nothing_for_this_platform_says_so() {
         var tile = gridTile({
             isInstalled: false, installStatus: Types.InstallStatus.NotInstalled,

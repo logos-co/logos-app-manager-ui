@@ -190,6 +190,8 @@ ItemDelegate {
                     text: !d.isAvailable    ? Stages.actionWord(Types.RowAction.NotAvailable)
                         : d.hasProgress     ? Downloads.percent(d.dlReceived, d.dlTotal)
                         : d.findingPeers    ? Stages.findingPeersWord()
+                        // Waiting its turn: Basecamp asks about it once the install before it ends.
+                        : d.installStage === Types.InstallStage.Queued ? Stages.stageWord(Types.InstallStage.Queued)
                         : d.isInstalling    ? Stages.stageWord(Types.InstallStage.Installing)
                         : d.installStage === Types.InstallStage.Failed ? Stages.stageWord(Types.InstallStage.Failed)
                         : Stages.actionWord(d.statusAction)

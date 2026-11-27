@@ -28,7 +28,8 @@ The view never installs anything, and never sees an approval.
    approved, installs them in order, and checks each on disk.
 
 The view gets back only how it ended (`finished`), and the tiles show each
-download and install as it happens.
+download and install as it happens. One install runs at a time: an app asked
+for meanwhile says Queued, and Basecamp is asked about it at its turn.
 
 Who signed what, in the details, is Basecamp's install dialog's judgement and
 words (the library's `Trust.h` and `Trust.js`), on the keyring package_manager

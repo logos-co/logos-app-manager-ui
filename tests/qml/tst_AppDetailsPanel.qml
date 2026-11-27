@@ -195,6 +195,16 @@ TestCase {
                 false)
     }
 
+    // Waiting its turn behind another install, Basecamp not asked yet: the
+    // details say Queued, and nothing else can be asked.
+    function test_a_request_waiting_its_turn_says_queued() {
+        const page = makePage(wallet([self()], { planInstallStage: Types.InstallStage.Queued }))
+        const action = find(page, "appManager.details.action")
+        compare(action.text, "Queued")
+        compare(action.enabled, false)
+        compare(find(page, "appManager.details.footer").text, "Queued")
+    }
+
     function test_a_failed_install_says_why_and_offers_retry() {
         const page = makePage(Rows.app("wallet_ui", {
             installStatus: Types.InstallStatus.Failed, rowAction: Types.RowAction.Retry,
