@@ -38,7 +38,10 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     bool keyringWaits = false;
     QList<std::function<void()>> keyringAnswers;
     // What the downloader serves, keyed "name@version": "name|version|rootHash|signer".
+    // With `downloadsWait`, downloadPinned answers when its answer runs.
     QHash<QString, QString> served;
+    bool downloadsWait = false;
+    QList<std::function<void()>> downloadAnswers;
 
     void addInstalled(const QString& name, const QString& version, const QString& rootHash,
                       const QString& type = QStringLiteral("user"))
@@ -65,10 +68,10 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     }
 
     // PackageModules
-    void startDownloader(std::function<void()> done) override
+    void startDownloader(std::function<void(bool)> done) override
     {
         calls << "start";
-        done();
+        done(true);
     }
     void listRepositories(std::function<void(const QVariantList&, bool)> done) override
     {
@@ -114,19 +117,23 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
                         const QString& rootHash, std::function<void(const QVariantMap&)> done) override
     {
         calls << "download " + name;
-        const QString content = served.value(name + "@" + version);
-        if (content.isEmpty()) {
-            done({{"name", name}, {"error", "no such release"}});
-            return;
-        }
-        const QString path = QDir(files.path()).filePath(name + "-" + version + ".lgx");
-        QFile f(path);
-        f.open(QIODevice::WriteOnly);
-        f.write(content.toUtf8());
-        f.close();
-        done({{"name", name}, {"version", version}, {"rootHash", rootHash},
-              {"repositoryUrl", repositoryUrl}, {"source", "https://repo.example/" + name + ".lgx"},
-              {"path", path}});
+        const auto answer = [this, repositoryUrl, name, version, rootHash, done] {
+            const QString content = served.value(name + "@" + version);
+            if (content.isEmpty()) {
+                done({{"name", name}, {"error", "no such release"}});
+                return;
+            }
+            const QString path = QDir(files.path()).filePath(name + "-" + version + ".lgx");
+            QFile f(path);
+            f.open(QIODevice::WriteOnly);
+            f.write(content.toUtf8());
+            f.close();
+            done({{"name", name}, {"version", version}, {"rootHash", rootHash},
+                  {"repositoryUrl", repositoryUrl}, {"source", "https://repo.example/" + name + ".lgx"},
+                  {"path", path}});
+        };
+        if (downloadsWait) downloadAnswers.append(answer);
+        else answer();
     }
     void verifyPackage(const QString& path, std::function<void(const QVariantMap&)> done) override
     {

@@ -209,6 +209,35 @@ TEST(install_asks_basecamp_and_installs_nothing_until_it_says_yes) {
     CHECK_EQ(roleOf(*a.manager.apps(), "wallet_ui", "isInstalled").toBool(), true);
 }
 
+// Retried before a reload, the tile shows the new download, not the failure
+// it left: it said Retry, and took no bytes, while the retry downloaded.
+TEST(a_retry_shows_its_own_download) {
+    App a;
+    a.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W")};
+    a.manager.load();
+    a.basecamp.decide = [](const QString&, const QVariantMap&) {
+        return fakes::approve({{"plan", QVariantList{fakes::release(kDefault, "wallet_ui", "1.0.0", "W")}}});
+    };
+    const QAbstractItemModel& apps = *a.manager.apps();
+    // Nothing serves it: the download fails.
+    CHECK(a.manager.install("wallet_ui", kDefault));
+    CHECK_EQ(roleOf(apps, "wallet_ui", "rowAction").toInt(),
+             static_cast<int>(logos::installer::RowAction::Retry));
+    SPIN(10);
+
+    a.modules.serve("wallet_ui", "1.0.0", "W");
+    a.modules.downloadsWait = true;
+    CHECK(a.manager.install("wallet_ui", kDefault));
+    a.manager.onDownloadProgress("wallet_ui", 10, 100, "http");
+    CHECK_EQ(roleOf(apps, "wallet_ui", "installStatus").toInt(),
+             static_cast<int>(logos::installer::InstallStatus::Installing));
+    CHECK_EQ(roleOf(apps, "wallet_ui", "planDownloadReceived").toULongLong(), 10ull);
+    CHECK_EQ(a.modules.downloadAnswers.size(), 1);
+    a.modules.downloadAnswers.takeFirst()();
+    SPIN(10);
+    CHECK_EQ(a.finished.last().outcome, static_cast<int>(Installer::Outcome::Done));
+}
+
 TEST(the_tiles_action_picks_what_is_asked) {
     App a;
     a.modules.catalog = {withOlderVersion(app(kDefault, "wallet_ui", "2.0.0", "W2"), "1.0.0", "W1"),
