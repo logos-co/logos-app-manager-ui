@@ -19,13 +19,15 @@ TestCase {
     property var appsModel: null
     property var logos: QtObject {
         property var requests: []
+        // How the shell answers each request.
+        property var result: ({ ok: true })
         function module(name) { return name === "app_manager_ui" ? testCase.backend : null }
         function model(name, property, prefetch) {
             return name === "app_manager_ui" && property === "apps" ? testCase.appsModel : null
         }
         function request(intent, params, callback) {
             requests = requests.concat([{ intent: intent, params: params }])
-            callback({ ok: true })
+            callback(result)
         }
     }
 
@@ -41,6 +43,7 @@ TestCase {
                               Rows.app("wallet_ui"), Rows.installed("chat_ui")])
         backend.visibleCount = 2
         logos.requests = []
+        logos.result = { ok: true }
     }
 
     function cleanup() {
@@ -105,6 +108,29 @@ TestCase {
         backend.finished("wallet_ui", 2, "the download stopped")
         tryVerify(() => toast.visible)
         compare(toast.message, "the download stopped")
+    }
+
+    // The shell couldn't open the app: say so; a cancel was the person's own.
+    function test_an_app_the_shell_couldnt_open_says_so() {
+        const app = makeApp()
+        const toast = find(app, "appManager.toast")
+        logos.result = { ok: false, error: "cancelled" }
+        mouseClick(find(app, "appManager.app.chat_ui"))
+        compare(toast.visible, false, "a cancel needs no message")
+        logos.result = { ok: false, error: "unavailable" }
+        mouseClick(find(app, "appManager.app.chat_ui"))
+        tryVerify(() => toast.visible)
+        compare(toast.title, "Couldn't open chat_ui")
+        compare(toast.message, "Nothing in Basecamp can do that right now.")
+    }
+
+    function test_repository_settings_the_shell_couldnt_open_say_so() {
+        const app = makeApp()
+        const toast = find(app, "appManager.toast")
+        logos.result = { ok: false, error: "timeout" }
+        mouseClick(find(app, "appManager.repositoriesButton"))
+        tryVerify(() => toast.visible)
+        compare(toast.title, "Couldn't open the repository settings")
     }
 
     // A reload that failed keeps the list and says so, each time; a first

@@ -39,7 +39,7 @@ pipeline, and the JavaScript for their words.
 
 | | |
 |---|---|
-| `src/qml/` | The view. `AppManager.qml` is the entry: the apps page (`AppManagerView`) and an app's details beside it (`AppDetailsPanel`) |
+| `src/qml/` | The view. `AppManager.qml` is the entry: the apps page (`AppManagerView`), an app's details beside it (`AppDetailsPanel`), and what the shell couldn't do, in a toast |
 | `src/qml/Installer/` | The library's JavaScript, a copy: `scripts/sync-installer-common.sh` refreshes it, and the `shared-installer-words` check keeps it the pinned revision |
 | `src/app_manager_ui.rep` | What the view reads and asks of the backend |
 | `src/AppManagerBackend.*` | The backend, run as the core module `app_manager_ui_backend`: hands `AppManager` the package modules and Basecamp's consent, forwards the modules' events, mirrors its state into the `.rep` |

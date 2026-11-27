@@ -25,18 +25,35 @@ Rectangle {
     QtObject {
         id: d
 
-        function request(intent, params) {
+        // `failedTitle` heads the toast when the shell couldn't do it; a
+        // cancel was the person's own.
+        function request(intent, params, failedTitle) {
             if (typeof logos === "undefined" || typeof logos.request !== "function") {
                 console.warn("App Manager: no logos.request on this host:", intent)
                 return
             }
             logos.request(intent, params, function (result) {
-                if (!result || !result.ok)
-                    console.warn("App Manager:", intent, "failed:", result ? result.error : "no result")
+                if (result && result.ok) return
+                const error = result ? result.error || "" : ""
+                console.warn("App Manager:", intent, "failed:", error || "no result")
+                if (error !== "cancelled") toast.show(failedTitle, why(error))
             })
         }
 
-        function open(name) { request("basecamp.apps.launch", { app: name }) }
+        // The intent error codes, in words.
+        function why(error) {
+            switch (error) {
+            case "unavailable":  return qsTr("Nothing in Basecamp can do that right now.")
+            case "timeout":      return qsTr("Basecamp didn't answer in time.")
+            case "not_declared": return qsTr("App Manager isn't allowed to ask for that.")
+            case "bad_request":  return qsTr("Basecamp didn't understand the request.")
+            default:             return ""
+            }
+        }
+
+        function open(name) {
+            request("basecamp.apps.launch", { app: name }, qsTr("Couldn't open %1").arg(name))
+        }
     }
 
     AppManagerView {
@@ -45,7 +62,8 @@ Rectangle {
         backend: root.backend
         apps: root.apps
         onOpenRequested: (name) => d.open(name)
-        onRepositoriesRequested: d.request("basecamp.repositories.manage", {})
+        onRepositoriesRequested: d.request("basecamp.repositories.manage", {},
+                                           qsTr("Couldn't open the repository settings"))
     }
 
     // Why a change failed; the tile says that it did.
