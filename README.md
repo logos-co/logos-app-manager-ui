@@ -61,15 +61,15 @@ their own under it.
 
 ## Build and test
 
-Until basecamp-installer-common is published, point its input at a checkout:
-
 ```bash
-o="--override-input basecamp-installer-common path:../basecamp-installer-common --no-write-lock-file"
-nix build $o                                        # the module
-nix build $o .#checks.aarch64-linux.unit-tests      # the backend's logic, on fakes
-nix build $o .#checks.aarch64-linux.shared-installer-words
-nix run $o .#qml-tests                              # the views, on Basecamp's design system
+nix build                                           # the module
+nix build .#checks.aarch64-linux.unit-tests         # the backend's logic, on fakes
+nix build .#checks.aarch64-linux.shared-installer-words
+nix run .#qml-tests                                 # the views, on Basecamp's design system
 ```
+
+To try a basecamp-installer-common change, add
+`--override-input basecamp-installer-common path:../basecamp-installer-common --no-write-lock-file`.
 
 - **unit-tests** (`tests/cpp`): `AppManager` and `AppSections` with fake
   package modules and a fake Basecamp. Basecamp's consent through
