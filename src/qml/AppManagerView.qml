@@ -185,6 +185,20 @@ Rectangle {
             message: notice ? notice.message : ""
         }
 
+        // Published packages are portable, so a dev build lists them all as
+        // unavailable; this says why, once.
+        LogosNotice {
+            id: devBuildNotice
+            objectName: "appManager.devBuildNotice"
+            readonly property var notice: Availability.devBuildNotice(d.hostVariant)
+            Layout.fillWidth: true
+            closable: true
+            shown: notice !== null
+            severity: LogosNotice.Info
+            title: notice ? notice.title : ""
+            message: notice ? notice.message : ""
+        }
+
         LogosSidebarLayout {
             id: body
             objectName: "appManager.body"
