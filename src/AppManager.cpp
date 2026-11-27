@@ -430,19 +430,24 @@ void AppManager::closeDetails()
     refreshDetails();
 }
 
-void AppManager::selectVersion(const QString& name, const QString& repositoryUrl, int versionIndex)
+void AppManager::selectVersion(const QString& name, const QString& repositoryUrl, const QString& version)
 {
     const int row = rowOf(name, repositoryUrl);
-    if (row < 0) return;
+    if (row < 0 || version.isEmpty()) return;
+    // By its name, not its place: a list that changed since the view showed
+    // it moves the place. One it no longer lists is no pick.
+    const QVariantList versions = m_model->rowAt(row).value(QStringLiteral("availableVersions")).toList();
+    int index = -1;
+    for (int i = 0; i < versions.size() && index < 0; ++i)
+        if (versions.at(i).toMap().value(QStringLiteral("version")).toString() == version) index = i;
+    if (index < 0) return;
     // The app's own version is its row's, as its tile shows it; another
     // package's is only the details'.
     if (name == m_detailsName || m_detailsName.isEmpty()) {
-        m_model->selectVersion(row, versionIndex);
+        m_model->selectVersion(row, index);
         return;
     }
-    const QString version = m_model->rowAt(row).value(QStringLiteral("availableVersions")).toList()
-                                .value(versionIndex).toMap().value(QStringLiteral("version")).toString();
-    if (version.isEmpty() || m_versions.value(name).toString() == version) return;
+    if (m_versions.value(name).toString() == version) return;
     m_versions.insert(name, version);
     refreshDetails();
 }

@@ -204,9 +204,9 @@ void AppManagerBackend::closeDetails()
     m_manager->closeDetails();
 }
 
-void AppManagerBackend::selectVersion(QString name, QString repositoryUrl, int versionIndex)
+void AppManagerBackend::selectVersion(QString name, QString repositoryUrl, QString version)
 {
-    m_manager->selectVersion(name, repositoryUrl, versionIndex);
+    m_manager->selectVersion(name, repositoryUrl, version);
 }
 
 void AppManagerBackend::setOptional(QString name, bool selected)

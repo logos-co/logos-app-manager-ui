@@ -228,8 +228,8 @@ Rectangle {
                     onOpenRequested: (name) => root.openRequested(name)
                     onInstallRequested: (name, repositoryUrl) => root.backend.install(name, repositoryUrl)
                     onUninstallRequested: (name, repositoryUrl) => root.backend.uninstall(name, repositoryUrl)
-                    onVersionPicked: (name, repositoryUrl, index) =>
-                        root.backend.selectVersion(name, repositoryUrl, index)
+                    onVersionPicked: (name, repositoryUrl, version) =>
+                        root.backend.selectVersion(name, repositoryUrl, version)
                     onOptionalToggled: (name, selected) => root.backend.setOptional(name, selected)
                 }
 

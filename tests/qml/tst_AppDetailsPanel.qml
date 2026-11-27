@@ -152,7 +152,7 @@ TestCase {
         compare(versionSpy.count, 1)
         compare(versionSpy.signalArguments[0][0], "wallet_ui")
         compare(versionSpy.signalArguments[0][1], Rows.repo)
-        compare(versionSpy.signalArguments[0][2], 1)
+        compare(versionSpy.signalArguments[0][2], "1.0.0")
     }
 
     // A picker on every row with a version, one version or many; one on disk
@@ -343,7 +343,7 @@ TestCase {
         compare(versionSpy.count, 1)
         compare(versionSpy.signalArguments[0][0], "signer")
         compare(versionSpy.signalArguments[0][1], Rows.repo)
-        compare(versionSpy.signalArguments[0][2], 1)
+        compare(versionSpy.signalArguments[0][2], "1.0.0")
     }
 
     function test_an_optional_package_can_be_left_out() {
@@ -459,7 +459,7 @@ TestCase {
         compare(picker.model, ["1.0.0", "0.9.0"])
         compare(picker.currentIndex, 0)
         picker.activated(1)
-        compare(versionSpy.signalArguments[0][2], 2)
+        compare(versionSpy.signalArguments[0][2], "0.9.0")
     }
 
     function test_with_nothing_this_host_can_fetch_the_version_is_said() {

@@ -41,6 +41,6 @@ QtObject {
     function uninstall(name, repositoryUrl) { record("uninstall " + name + " " + repositoryUrl); return true }
     function showDetails(name, repositoryUrl) { record("details " + name + " " + repositoryUrl) }
     function closeDetails() { record("closeDetails"); details = ({}) }
-    function selectVersion(name, repositoryUrl, index) { record("selectVersion " + name + " " + index) }
+    function selectVersion(name, repositoryUrl, version) { record("selectVersion " + name + " " + version) }
     function setOptional(name, selected) { record("optional " + name + " " + selected) }
 }

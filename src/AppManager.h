@@ -129,7 +129,7 @@ public:
     // whether an optional package comes with it: they go to Basecamp with the
     // open app's install, which plans with them. Forgotten when the details
     // close.
-    void selectVersion(const QString& name, const QString& repositoryUrl, int versionIndex);
+    void selectVersion(const QString& name, const QString& repositoryUrl, const QString& version);
     void setOptional(const QString& name, bool selected);
 
 signals:

@@ -23,7 +23,8 @@ Item {
     // Nothing is picked while an install runs.
     property bool installing: false
 
-    signal versionPicked(string name, string repositoryUrl, int versionIndex)
+    // By the version's name: the backend's list may have moved since.
+    signal versionPicked(string name, string repositoryUrl, string version)
     signal optionalToggled(string name, bool selected)
 
     implicitHeight: content.implicitHeight + 2 * Theme.spacing.small
@@ -175,7 +176,8 @@ Item {
                 model: d.served.map(i => d.versions[i])
                 currentIndex: d.served.indexOf(d.r.selectedVersionIndex || 0)
                 displayText: currentText ? "v" + currentText : ""
-                onActivated: (index) => root.versionPicked(d.r.name || "", d.r.repositoryUrl || "", d.served[index])
+                onActivated: (index) => root.versionPicked(d.r.name || "", d.r.repositoryUrl || "",
+                                                           d.versions[d.served[index]] || "")
             }
             // What is on disk, and what it would become; with nothing this
             // host can fetch, the version it would be.

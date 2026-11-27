@@ -36,7 +36,7 @@ Rectangle {
     signal installRequested(string name, string repositoryUrl)
     signal uninstallRequested(string name, string repositoryUrl)
     // Of the app or of a package it brings.
-    signal versionPicked(string name, string repositoryUrl, int versionIndex)
+    signal versionPicked(string name, string repositoryUrl, string version)
     signal optionalToggled(string name, bool selected)
 
     color: Theme.palette.surfaceRaised
@@ -332,8 +332,8 @@ Rectangle {
                             Layout.fillWidth: true
                             row: modelData
                             installing: d.installing
-                            onVersionPicked: (name, repositoryUrl, index) =>
-                                root.versionPicked(name, repositoryUrl, index)
+                            onVersionPicked: (name, repositoryUrl, version) =>
+                                root.versionPicked(name, repositoryUrl, version)
                             onOptionalToggled: (name, selected) => root.optionalToggled(name, selected)
                         }
                     }
@@ -369,8 +369,8 @@ Rectangle {
                             Layout.fillWidth: true
                             row: modelData
                             installing: d.installing
-                            onVersionPicked: (name, repositoryUrl, index) =>
-                                root.versionPicked(name, repositoryUrl, index)
+                            onVersionPicked: (name, repositoryUrl, version) =>
+                                root.versionPicked(name, repositoryUrl, version)
                             onOptionalToggled: (name, selected) => root.optionalToggled(name, selected)
                         }
                     }

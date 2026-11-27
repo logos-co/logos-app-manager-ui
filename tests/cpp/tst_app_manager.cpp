@@ -218,7 +218,7 @@ TEST(the_tiles_action_picks_what_is_asked) {
     CHECK_EQ(a.lastParams().value("mode").toInt(), 0);
     a.basecamp.waiting.takeFirst()(fakes::refuse("cancelled"));
 
-    a.manager.selectVersion("wallet_ui", kDefault, 1);
+    a.manager.selectVersion("wallet_ui", kDefault, "1.0.0");
     CHECK(a.manager.install("wallet_ui", kDefault));
     CHECK_EQ(a.lastParams().value("version").toString(), QStringLiteral("1.0.0"));
     CHECK_EQ(a.lastParams().value("mode").toInt(), 1);
@@ -498,7 +498,7 @@ TEST(details_follow_the_app_and_close) {
     a.manager.showDetails("wallet_ui", kDefault);
     CHECK_EQ(a.manager.details().value("name").toString(), QStringLiteral("wallet_ui"));
     CHECK_EQ(a.manager.details().value("version").toString(), QStringLiteral("2.0.0"));
-    a.manager.selectVersion("wallet_ui", kDefault, 1);
+    a.manager.selectVersion("wallet_ui", kDefault, "1.0.0");
     CHECK_EQ(a.manager.details().value("version").toString(), QStringLiteral("1.0.0"));
     CHECK(changed.count() >= 2);
     a.manager.closeDetails();
@@ -539,7 +539,7 @@ TEST(the_picks_in_the_details_go_to_basecamp_with_the_install) {
     a.manager.load();
     a.manager.showDetails("wallet_ui", kDefault);
 
-    a.manager.selectVersion("signer", kDefault, 1);
+    a.manager.selectVersion("signer", kDefault, "1.0.0");
     a.manager.setOptional("extra", false);
     const auto entry = [&a](const QString& name) {
         for (const QVariant& v : a.manager.details().value("packages").toList())
@@ -586,7 +586,7 @@ TEST(what_comes_with_an_optional_package_goes_to_basecamp_as_a_version_not_a_cho
     CHECK(entry("rln").value("selected").toBool());
     CHECK_EQ(entry("zk").value("requiredFor").toString(), QStringLiteral("rln"));
 
-    a.manager.selectVersion("zk", kDefault, 1);
+    a.manager.selectVersion("zk", kDefault, "1.0.0");
     CHECK(a.manager.install("chat_ui", kDefault));
     CHECK_EQ(a.lastParams().value("versions").toMap(), (QVariantMap{{"zk", "1.0.0"}}));
     CHECK_EQ(a.lastParams().value("optional").toMap(), (QVariantMap{{"rln", true}}));
@@ -641,7 +641,7 @@ TEST(a_version_picked_for_an_app_it_brings_leaves_that_apps_tile_as_it_was) {
                          withOlderVersion(app(kDefault, "keys_ui", "2.0.0", "K2"), "1.0.0", "K1")};
     a.manager.load();
     a.manager.showDetails("wallet_ui", kDefault);
-    a.manager.selectVersion("keys_ui", kDefault, 1);
+    a.manager.selectVersion("keys_ui", kDefault, "1.0.0");
     QVariantMap keys;
     for (const QVariant& v : a.manager.details().value("packages").toList())
         if (v.toMap().value("name").toString() == QLatin1String("keys_ui")) keys = v.toMap();
@@ -689,6 +689,25 @@ TEST(the_download_notice_reads_the_downloader) {
     a.manager.onStorageStateChanged("running", {});
     CHECK_EQ(a.manager.storageState(), QStringLiteral("running"));
     CHECK(changed.count() > 0);
+}
+
+// ── Versions ─────────────────────────────────────────────────────────────
+
+// The view names the version it showed: a list that moved since picks it
+// still, and one no longer listed picks nothing.
+TEST(a_version_is_picked_by_its_name) {
+    App a;
+    a.modules.catalog = {withOlderVersion(app(kDefault, "wallet_ui", "2.0.0", "W2"), "1.0.0", "W1")};
+    a.manager.load();
+    a.manager.showDetails("wallet_ui", kDefault);
+    // A newer release came in after the view drew its picker.
+    a.modules.catalog = {withOlderVersion(withOlderVersion(app(kDefault, "wallet_ui", "3.0.0", "W3"),
+                                                           "2.0.0", "W2"), "1.0.0", "W1")};
+    a.manager.refresh();
+    a.manager.selectVersion("wallet_ui", kDefault, "2.0.0");
+    CHECK_EQ(a.manager.details().value("version").toString(), QStringLiteral("2.0.0"));
+    a.manager.selectVersion("wallet_ui", kDefault, "0.9.0");
+    CHECK_EQ(a.manager.details().value("version").toString(), QStringLiteral("2.0.0"));
 }
 
 // ── Loading ──────────────────────────────────────────────────────────────
