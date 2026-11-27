@@ -250,4 +250,35 @@ TEST(a_source_reset_is_followed_row_by_row) {
     CHECK(removed.count() > 0);
 }
 
+// A source reset that keeps its rows may change what they hold: a view
+// keeping their delegates is told so.
+TEST(the_rows_a_source_reset_keeps_say_they_changed) {
+    struct Resetting : QStandardItemModel {
+        void reset()
+        {
+            beginResetModel();
+            endResetModel();
+        }
+    } model;
+    model.setItemRoleNames({{kName, "name"}, {kSourceKey, "sourceKey"}, {kStage, "installStage"}});
+    auto* item = new QStandardItem;
+    item->setData("wallet", kName);
+    item->setData("https://default", kSourceKey);
+    item->setData(0, kStage);
+    model.appendRow(item);
+    AppSections s;
+    s.setSourceModel(&model);
+    QSignalSpy reset(&s, &QAbstractItemModel::modelReset);
+    QSignalSpy changed(&s, &QAbstractItemModel::dataChanged);
+    {
+        const QSignalBlocker quiet(&model);
+        item->setData(3, kStage);
+    }
+    model.reset();
+    CHECK_EQ(lines(s), (QStringList{"§https://default 1", "wallet"}));
+    CHECK_EQ(reset.count(), 0);
+    CHECK(changed.count() > 0);
+    CHECK_EQ(s.data(s.index(1), kStage).toInt(), 3);
+}
+
 CHECK_MAIN()

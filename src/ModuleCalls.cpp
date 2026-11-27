@@ -78,6 +78,14 @@ void ModuleCalls::listTrustedKeys(std::function<void(const QVariantList&, bool)>
         [done](logos::AsyncResult<QVariantList> r) { done(r.value, r.ok()); }, Timeout(kReadMs));
 }
 
+void ModuleCalls::resolveFlatDependencies(const QString& name,
+                                          std::function<void(const QVariantList&, bool)> done)
+{
+    m_modules.package_manager.resolveFlatDependenciesAsyncResult(
+        name, true, [done](logos::AsyncResult<QVariantList> r) { done(r.value, r.ok()); },
+        Timeout(kReadMs));
+}
+
 void ModuleCalls::downloadPinned(const QString& repositoryUrl, const QString& name,
                                  const QString& version, const QString& rootHash,
                                  std::function<void(const QVariantMap&)> done)

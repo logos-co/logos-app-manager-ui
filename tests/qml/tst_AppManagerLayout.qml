@@ -130,11 +130,13 @@ TestCase {
 
     function test_empty_states_fit(data) {
         backend.repositoryCount = 0
+        backend.appCount = 0
         let view = makeView(data.width, [])
         verify(find(view, "appManager.noReposView").visible)
         noneOverTheSides(view)
 
         backend.repositoryCount = 1
+        backend.appCount = 1
         view = makeView(data.width, [])
         view.applySearch("nothing like this")
         waitForRendering(view)

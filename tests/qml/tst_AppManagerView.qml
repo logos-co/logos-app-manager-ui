@@ -312,10 +312,78 @@ TestCase {
         compare(backend.called("install"), ["install wallet_ui " + Rows.repo])
     }
 
+    // The menu offers what the backend does: no Install with nothing for this
+    // platform, nor while an install of it runs.
+    function test_the_menu_offers_no_install_the_backend_would_refuse() {
+        const view = makeView([Rows.section(Rows.repo, "Logos", 2),
+                               Rows.app("mac_ui", { hasInstallableVersion: false,
+                                                    rowAction: Types.RowAction.NotAvailable }),
+                               Rows.app("wallet_ui", { installStatus: Types.InstallStatus.Installing,
+                                                       planInstallStage: Types.InstallStage.Downloading,
+                                                       rowAction: Types.RowAction.NoOp })])
+        for (const name of ["mac_ui", "wallet_ui"]) {
+            const tile = find(view, "appManager.app." + name)
+            mouseClick(tile, tile.width / 2, tile.height / 2, Qt.RightButton)
+            const menu = menuOf(tile)
+            tryVerify(() => menu.opened)
+            compare(menuItem(menu, "appContextMenu.install").visible, false, name)
+            verify(menuItem(menu, "appContextMenu.details").visible, name)
+            menu.close()
+            tryVerify(() => !menu.visible)
+        }
+    }
+
+    // Downloaded is still the install: Uninstall waits it out, as the
+    // backend does.
+    function test_uninstall_waits_out_a_downloaded_install() {
+        const view = makeView([Rows.section(Rows.repo, "Logos", 1),
+                               Rows.installed("chat_ui", { planInstallStage: Types.InstallStage.Downloaded })])
+        const tile = find(view, "appManager.app.chat_ui")
+        mouseClick(tile, tile.width / 2, tile.height / 2, Qt.RightButton)
+        const menu = menuOf(tile)
+        tryVerify(() => menu.opened)
+        const uninstall = menuItem(menu, "appContextMenu.uninstall")
+        verify(uninstall.visible)
+        compare(uninstall.enabled, false)
+    }
+
+    // On disk but missing a package it needs, it isn't installed: Install
+    // brings what it lacks, and it can still be removed.
+    function test_an_app_missing_a_package_offers_install_and_uninstall() {
+        const view = makeView([Rows.section(Rows.repo, "Logos", 1),
+                               Rows.app("wallet_ui", { installType: "user", installedVersion: "1.0.0" })])
+        const tile = find(view, "appManager.app.wallet_ui")
+        mouseClick(tile, tile.width / 2, tile.height / 2, Qt.RightButton)
+        const menu = menuOf(tile)
+        tryVerify(() => menu.opened)
+        compare(menuItem(menu, "appContextMenu.open").visible, false)
+        verify(menuItem(menu, "appContextMenu.install").visible)
+        const uninstall = menuItem(menu, "appContextMenu.uninstall")
+        verify(uninstall.visible)
+        verify(uninstall.enabled)
+        uninstall.triggered()
+        compare(backend.called("uninstall"), ["uninstall wallet_ui " + Rows.repo])
+    }
+
+    // A list row's trash follows the menu's rule, and says what it removes.
+    function test_a_list_rows_uninstall_follows_the_menu() {
+        const view = makeView([Rows.section(Rows.repo, "Logos", 2),
+                               Rows.installed("chat_ui", { displayName: "Chat" }),
+                               Rows.app("wallet_ui", { displayName: "Wallet", installType: "user",
+                                                       installedVersion: "1.0.0" })])
+        find(view, "appManager.panelHeader").viewModeChangeRequested("list")
+        waitForRendering(view)
+        const chat = findChild(find(view, "appManager.app.chat_ui"), "appListDelegate.uninstall")
+        verify(chat.visible)
+        compare(chat.Accessible.name, "Uninstall Chat")
+        verify(findChild(find(view, "appManager.app.wallet_ui"), "appListDelegate.uninstall").visible)
+    }
+
     // ── Empty states ─────────────────────────────────────────────────────────
 
     function test_no_repositories_offers_to_add_one() {
         backend.repositoryCount = 0
+        backend.appCount = 0
         const view = makeView([])
         const empty = find(view, "appManager.noReposView")
         verify(empty.visible)
@@ -325,7 +393,6 @@ TestCase {
 
     function test_apps_installed_from_a_file_show_with_no_repository() {
         backend.repositoryCount = 0
-        backend.localCount = 1
         const view = makeView([Rows.section("local", "local", 1),
                                Rows.installed("scratch_ui", { sectionKey: "local", repositoryUrl: "" })])
         compare(find(view, "appManager.noReposView").visible, false)
@@ -340,6 +407,7 @@ TestCase {
     }
 
     function test_nothing_for_this_platform_names_it() {
+        backend.availableCount = 0
         const view = makeView([])
         const none = find(view, "appManager.noneForPlatformView")
         verify(none.visible)
@@ -371,6 +439,7 @@ TestCase {
     // A first load that failed knows nothing: not "no repositories".
     function test_a_first_load_that_failed_says_so_and_retries() {
         backend.repositoryCount = 0
+        backend.appCount = 0
         backend.loaded = false
         backend.loadError = "the catalog"
         const view = makeView([])
@@ -383,6 +452,72 @@ TestCase {
         backend.loaded = true
         backend.loadError = ""
         compare(failed.visible, false)
+        verify(find(view, "appManager.noReposView").visible)
+    }
+
+    // "Nothing available for this platform" was all the page said with every
+    // repository turned off, or none answering.
+    function test_every_repository_turned_off_says_so() {
+        backend.repositoryCount = 2
+        backend.enabledRepositoryCount = 0
+        backend.appCount = 0
+        const view = makeView([])
+        verify(find(view, "appManager.repositoriesOffView").visible)
+        compare(find(view, "appManager.noneForPlatformView").visible, false)
+        mouseClick(find(view, "appManager.repositoriesOffView.manage"))
+        compare(reposSpy.count, 1)
+    }
+
+    function test_a_repository_out_of_reach_says_so_and_retries() {
+        backend.unreachableRepositories = ["Logos"]
+        backend.appCount = 0
+        const view = makeView([])
+        const unreachable = find(view, "appManager.unreachableView")
+        verify(unreachable.visible)
+        compare(unreachable.message, "Couldn't read Logos. Check your connection, then try again.")
+        compare(find(view, "appManager.noneForPlatformView").visible, false)
+        mouseClick(find(view, "appManager.unreachableView.retry"))
+        compare(backend.called("refresh").length, 1)
+    }
+
+    function test_repositories_with_no_apps_say_so() {
+        backend.appCount = 0
+        const view = makeView([])
+        verify(find(view, "appManager.noAppsView").visible)
+        compare(find(view, "appManager.noneForPlatformView").visible, false)
+    }
+
+    // Showing the apps this platform can't run, with no app at all, left the
+    // panel blank.
+    function test_showing_unavailable_apps_with_none_says_so() {
+        backend.appCount = 0
+        const view = makeView([])
+        find(view, "appManager.panelHeader").showUnavailableRequested(true)
+        compare(backend.showUnavailable, true)
+        verify(find(view, "appManager.noAppsView").visible)
+    }
+
+    // With no repository, the apps from a file are searched: a search that
+    // misses says so, not "no repositories".
+    function test_a_search_over_apps_from_a_file_that_misses_says_so() {
+        backend.repositoryCount = 0
+        const view = makeView([])
+        view.applySearch("zzz")
+        tryVerify(() => find(view, "appManager.emptyView").visible)
+        compare(find(view, "appManager.noReposView").visible, false)
+    }
+
+    // Until the catalog is read, nothing is said of what it lacks.
+    function test_nothing_is_said_before_the_catalog_is_read() {
+        backend.loaded = false
+        backend.repositoryCount = 0
+        backend.appCount = 0
+        const view = makeView([])
+        for (const name of ["appManager.noReposView", "appManager.repositoriesOffView",
+                            "appManager.unreachableView", "appManager.noAppsView",
+                            "appManager.loadErrorView"])
+            compare(find(view, name).visible, false, name)
+        backend.loaded = true
         verify(find(view, "appManager.noReposView").visible)
     }
 

@@ -34,9 +34,18 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     QHash<QString, QVariantMap> installed;
     // The keyring, as listTrustedKeys reports it: [{did, displayName}].
     QVariantList trustedKeys;
-    // With `keyringWaits`, listTrustedKeys answers when its answer runs.
+    // With `keyringWaits`, listTrustedKeys answers when its answer runs, with
+    // the keyring as it was when asked.
     bool keyringWaits = false;
     QList<std::function<void()>> keyringAnswers;
+    // What each installed package needs, and what only optionally: what
+    // resolveFlatDependencies answers from, with what is installed. With
+    // `dependenciesWait`, it answers when its answer runs.
+    QHash<QString, QStringList> needs;
+    QHash<QString, QStringList> mayUse;
+    bool dependenciesWait = false;
+    QList<std::function<void()>> dependencyAnswers;
+    QStringList dependencyReads;
     // What the downloader serves, keyed "name@version": "name|version|rootHash|signer".
     // With `downloadsWait`, downloadPinned answers when its answer runs.
     QHash<QString, QString> served;
@@ -104,11 +113,31 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     }
     void listTrustedKeys(std::function<void(const QVariantList&, bool)> done) override
     {
-        const auto answer = [this, done] {
-            const bool read = !failing.contains("listTrustedKeys");
-            done(read ? trustedKeys : QVariantList{}, read);
-        };
+        const bool read = !failing.contains("listTrustedKeys");
+        const auto answer = [done, read, keys = trustedKeys] { done(read ? keys : QVariantList{}, read); };
         if (keyringWaits) keyringAnswers.append(answer);
+        else answer();
+    }
+    // package_manager's resolveFlatDependencies(name, true), as AppManager
+    // reads it (setReadDependencies()).
+    void resolveFlatDependencies(const QString& name, std::function<void(const QVariantList&, bool)> done)
+    {
+        dependencyReads << name;
+        const auto answer = [this, name, done] {
+            if (failing.contains("resolveFlatDependencies")) {
+                done({}, false);
+                return;
+            }
+            QVariantList rows;
+            for (const QString& dep : needs.value(name) + mayUse.value(name)) {
+                QVariantMap row{{"name", dep},
+                                {"status", installed.contains(dep) ? "installed" : "not_installed"}};
+                if (mayUse.value(name).contains(dep)) row.insert("optional", true);
+                rows.append(row);
+            }
+            done(rows, true);
+        };
+        if (dependenciesWait) dependencyAnswers.append(answer);
         else answer();
     }
 

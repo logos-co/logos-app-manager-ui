@@ -70,6 +70,10 @@ struct App {
         manager.setDebounceInterval(0);
         manager.setClearDelay(0);
         manager.setModules(&modules, &modules, &basecamp);
+        manager.setReadDependencies(
+            [this](const QString& name, std::function<void(const QVariantList&, bool)> done) {
+                modules.resolveFlatDependencies(name, std::move(done));
+            });
         QObject::connect(&manager, &AppManager::finished, &manager,
                          [this](const QString& name, int outcome, const QString& error) {
                              finished.append({name, outcome, error});
@@ -119,7 +123,7 @@ TEST(apps_are_listed_by_repository_the_default_first_and_local_last) {
     CHECK_EQ(a.lines(), (QStringList{"§Logos 2", "chat_ui", "wallet_ui", "§Mine 1", "notes_ui",
                                      "§local 1", "scratch_ui"}));
     CHECK_EQ(a.manager.visibleCount(), 4);
-    CHECK_EQ(a.manager.localCount(), 1);
+    CHECK_EQ(a.manager.appCount(), 4);
     CHECK_EQ(a.manager.repositoryCount(), 2);
     CHECK_EQ(a.manager.hostVariant(), QStringLiteral("linux-x86_64"));
     CHECK(!a.manager.loading());
@@ -172,6 +176,44 @@ TEST(an_app_with_nothing_for_this_platform_shows_only_when_asked) {
     // Not available: the tile offers nothing to install.
     CHECK(!a.manager.install("mac_ui", kDefault));
     CHECK(a.basecamp.asked.isEmpty());
+}
+
+// What the page's empty states read: whatever the filters, every app from
+// an enabled repository or a file, and those this host can install or has.
+TEST(the_counts_say_what_the_catalog_holds_whatever_the_filters) {
+    App a;
+    a.modules.repositories[1] = QVariantMap{{"url", kMine}, {"displayName", "Mine"}, {"enabled", false}};
+    a.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W"),
+                         catalogRow(kDefault, "mac_ui", "1.0.0", "X", {}, {"darwin-arm64"}),
+                         app(kMine, "notes_ui", "1.0.0", "N"),
+                         catalogRow(kDefault, "waku_module", "1.0.0", "K", {}, kHere, "core")};
+    a.addLocal("scratch_ui");
+    a.manager.load();
+    CHECK_EQ(a.manager.appCount(), 3);
+    CHECK_EQ(a.manager.availableCount(), 2);
+    a.manager.setSearchText("nothing like this");
+    a.manager.setInstallState(1);
+    CHECK_EQ(a.manager.visibleCount(), 0);
+    CHECK_EQ(a.manager.appCount(), 3);
+    CHECK_EQ(a.manager.availableCount(), 2);
+}
+
+// "Nothing for this platform" was all the page could say with every
+// repository turned off, or none answering.
+TEST(repositories_turned_off_or_out_of_reach_are_told_apart) {
+    App a;
+    a.modules.repositories = {
+        QVariantMap{{"url", kDefault}, {"displayName", "Logos"}, {"isDefault", true},
+                    {"resolveError", "fetch failed: https://default"}},
+        QVariantMap{{"url", kMine}, {"displayName", "Mine"}, {"enabled", false}},
+    };
+    QSignalSpy changed(&a.manager, &AppManager::repositoriesChanged);
+    a.manager.load();
+    CHECK(changed.count() > 0);
+    CHECK_EQ(a.manager.repositoryCount(), 2);
+    CHECK_EQ(a.manager.enabledRepositoryCount(), 1);
+    CHECK_EQ(a.manager.unreachableRepositories(), QStringList{"Logos"});
+    CHECK_EQ(a.manager.appCount(), 0);
 }
 
 // ── Installing: Basecamp first ───────────────────────────────────────────
@@ -252,6 +294,7 @@ TEST(the_tiles_action_picks_what_is_asked) {
     CHECK_EQ(a.lastParams().value("mode").toInt(), 0);
     a.basecamp.waiting.takeFirst()(fakes::refuse("cancelled"));
 
+    a.manager.showDetails("wallet_ui", kDefault);
     a.manager.selectVersion("wallet_ui", kDefault, "1.0.0");
     CHECK(a.manager.install("wallet_ui", kDefault));
     CHECK_EQ(a.lastParams().value("version").toString(), QStringLiteral("1.0.0"));
@@ -450,6 +493,19 @@ TEST(nothing_installs_or_opens_from_a_disabled_repository) {
     CHECK(a.basecamp.asked.isEmpty());
 }
 
+// A repository turned off closes the details of its app, as the app leaves
+// the list, even from a downloader that still lists it.
+TEST(turning_a_repository_off_closes_its_apps_details) {
+    App a;
+    a.modules.catalog = {app(kMine, "notes_ui", "1.0.0", "N")};
+    a.manager.load();
+    a.manager.showDetails("notes_ui", kMine);
+    CHECK_EQ(a.manager.details().value("name").toString(), QStringLiteral("notes_ui"));
+    a.modules.repositories[1] = QVariantMap{{"url", kMine}, {"displayName", "Mine"}, {"enabled", false}};
+    a.manager.refresh();
+    CHECK(a.manager.details().isEmpty());
+}
+
 // By name, App Manager finds apps only, as its page lists them.
 TEST(by_name_only_an_app_is_found) {
     App a;
@@ -530,6 +586,94 @@ TEST(an_intent_it_does_not_provide_is_not_taken) {
     CHECK(!AppManager::provides("packages.show"));
     CHECK(!a.manager.deliver("packages.show", {{"name", "wallet_ui"}}, "main_ui", r.respond()));
     CHECK(r.got.isEmpty());
+}
+
+// ── What an installed app misses ─────────────────────────────────────────
+
+// An installed app missing a package it needs is not installed: Basecamp
+// won't open it, and its Install brings what it lacks. It used to stay
+// Installed with nothing to install, its details saying what was missing.
+TEST(an_installed_app_missing_a_package_it_needs_installs_it) {
+    App a;
+    a.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W", {dep("signer")}),
+                         catalogRow(kDefault, "signer", "1.0.0", "S", {}, kHere, "core"),
+                         app(kDefault, "chat_ui", "1.0.0", "C")};
+    a.modules.addInstalled("wallet_ui", "1.0.0", "W");
+    a.modules.needs.insert("wallet_ui", {"signer"});
+    a.modules.serve("signer", "1.0.0", "S");
+    a.manager.load();
+    // Only what is installed is asked about.
+    CHECK_EQ(a.modules.dependencyReads, QStringList{"wallet_ui"});
+    const QAbstractItemModel& apps = *a.manager.apps();
+    CHECK_EQ(roleOf(apps, "wallet_ui", "installStatus").toInt(),
+             static_cast<int>(logos::installer::InstallStatus::NotInstalled));
+    CHECK_EQ(roleOf(apps, "wallet_ui", "rowAction").toInt(),
+             static_cast<int>(logos::installer::RowAction::Install));
+
+    a.basecamp.decide = [](const QString&, const QVariantMap&) {
+        return fakes::approve({{"plan", QVariantList{fakes::release(kDefault, "wallet_ui", "1.0.0", "W"),
+                                                     fakes::release(kDefault, "signer", "1.0.0", "S")}}});
+    };
+    CHECK(a.manager.install("wallet_ui", kDefault));
+    CHECK_EQ(a.lastIntent(), QString(Consent::kConfirmInstall));
+    // What is on disk stays; what it lacks comes.
+    CHECK_EQ(a.changes(), QStringList{"install signer"});
+    a.manager.onPackagesChanged();
+    SPIN(20);
+    CHECK_EQ(roleOf(apps, "wallet_ui", "installStatus").toInt(),
+             static_cast<int>(logos::installer::InstallStatus::Installed));
+}
+
+// Basecamp hands over an app it couldn't open: once the load knows what the
+// app misses, its request asks Basecamp to install it.
+TEST(basecamps_request_for_an_app_missing_a_package_waits_and_installs_it) {
+    App a;
+    a.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W", {dep("signer")}),
+                         catalogRow(kDefault, "signer", "1.0.0", "S", {}, kHere, "core")};
+    a.modules.addInstalled("wallet_ui", "1.0.0", "W");
+    a.modules.needs.insert("wallet_ui", {"signer"});
+    a.modules.dependenciesWait = true;
+    Responses r;
+    CHECK(a.manager.deliver("apps.install", {{"name", "wallet_ui"}}, "main_ui", r.respond()));
+    a.manager.load();
+    CHECK(a.manager.loading());
+    CHECK(r.got.isEmpty());
+    CHECK_EQ(a.modules.dependencyAnswers.size(), 1);
+    a.modules.dependencyAnswers.takeFirst()();
+    CHECK(!a.manager.loading());
+    CHECK_EQ(r.got.size(), 1);
+    CHECK(r.got.first().first);
+    CHECK_EQ(a.lastIntent(), QString(Consent::kConfirmInstall));
+}
+
+// What only an optional dependency asks for is not missing: Basecamp opens
+// the app without it.
+TEST(an_optional_package_not_installed_is_not_missing) {
+    App a;
+    a.modules.catalog = {offering(app(kDefault, "chat_ui", "1.0.0", "C"), {"rln"}),
+                         catalogRow(kDefault, "rln", "1.0.0", "R", {}, kHere, "core")};
+    a.modules.addInstalled("chat_ui", "1.0.0", "C");
+    a.modules.mayUse.insert("chat_ui", {"rln"});
+    a.manager.load();
+    CHECK_EQ(roleOf(*a.manager.apps(), "chat_ui", "installStatus").toInt(),
+             static_cast<int>(logos::installer::InstallStatus::Installed));
+}
+
+// A read that fails says nothing new: the app stays as the last one said,
+// and the load still ends.
+TEST(a_dependency_read_that_fails_keeps_what_the_last_said) {
+    App a;
+    a.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W", {dep("signer")}),
+                         catalogRow(kDefault, "signer", "1.0.0", "S", {}, kHere, "core")};
+    a.modules.addInstalled("wallet_ui", "1.0.0", "W");
+    a.modules.needs.insert("wallet_ui", {"signer"});
+    a.manager.load();
+    const auto status = [&a] { return roleOf(*a.manager.apps(), "wallet_ui", "installStatus").toInt(); };
+    CHECK_EQ(status(), static_cast<int>(logos::installer::InstallStatus::NotInstalled));
+    a.modules.failing << "resolveFlatDependencies";
+    a.manager.refresh();
+    CHECK(!a.manager.loading());
+    CHECK_EQ(status(), static_cast<int>(logos::installer::InstallStatus::NotInstalled));
 }
 
 // ── Uninstalling ─────────────────────────────────────────────────────────
@@ -904,6 +1048,46 @@ TEST(the_details_read_the_keyring_again_when_what_is_installed_changes) {
     CHECK_EQ(trustOf(a, "signer").value("publisher").toString(), QStringLiteral("Acme"));
 }
 
+// "Trust & install" in Basecamp's dialog trusts the publisher before the
+// install, which can then fail with nothing installed: the details read the
+// keyring again once it ends.
+TEST(the_details_read_the_keyring_again_once_an_install_ends) {
+    App a;
+    a.modules.trustedKeys = {kLogosKey};
+    addWallet(a);
+    a.manager.load();
+    a.manager.showDetails("wallet_ui", kDefault);
+    CHECK_EQ(statusOf(trustOf(a, "signer")), QStringLiteral("untrusted"));
+    a.basecamp.decide = [&a](const QString&, const QVariantMap&) {
+        a.modules.trustedKeys.append(QVariantMap{{"did", kAcmeDid}, {"displayName", "Acme"}});
+        return fakes::approve({{"plan", QVariantList{fakes::release(kDefault, "wallet_ui", "1.0.0", "W"),
+                                                     fakes::release(kDefault, "signer", "2.0.0", "S2")}}});
+    };
+    CHECK(a.manager.install("wallet_ui", kDefault));
+    SPIN(10);
+    CHECK_EQ(a.finished.last().outcome, static_cast<int>(Installer::Outcome::Failed));
+    CHECK(a.changes().isEmpty());
+    CHECK_EQ(statusOf(trustOf(a, "signer")), QStringLiteral("trusted"));
+}
+
+// An older read answering last holds the keyring as it was before.
+TEST(an_older_keyring_answer_doesnt_undo_a_newer_one) {
+    App a;
+    a.modules.trustedKeys = {kLogosKey};
+    a.modules.keyringWaits = true;
+    addWallet(a);
+    a.manager.load();
+    a.manager.showDetails("wallet_ui", kDefault);
+    a.modules.trustedKeys.append(QVariantMap{{"did", kAcmeDid}, {"displayName", "Acme"}});
+    a.manager.onPackagesChanged();
+    SPIN(20);
+    CHECK_EQ(a.modules.keyringAnswers.size(), 2);
+    a.modules.keyringAnswers.takeLast()();
+    CHECK_EQ(statusOf(trustOf(a, "signer")), QStringLiteral("trusted"));
+    a.modules.keyringAnswers.takeFirst()();
+    CHECK_EQ(statusOf(trustOf(a, "signer")), QStringLiteral("trusted"));
+}
+
 // ── Reload and events ────────────────────────────────────────────────────
 
 TEST(reload_fetches_every_repository_again) {
@@ -968,6 +1152,50 @@ TEST(the_apps_own_version_picked_goes_with_its_details) {
     a.manager.showDetails("chat_ui", kDefault);
     a.manager.showDetails("wallet_ui", kDefault);
     CHECK_EQ(shown(), QStringLiteral("2.0.0"));
+}
+
+// Two repositories can list the same app: a version for the other one's
+// copy of the open app is no pick, and with no details open nothing is.
+TEST(a_version_for_another_copy_of_the_open_app_is_no_pick) {
+    App a;
+    a.modules.catalog = {withOlderVersion(app(kDefault, "wallet_ui", "2.0.0", "W2"), "1.0.0", "W1"),
+                         withOlderVersion(app(kMine, "wallet_ui", "2.0.0", "M2"), "1.0.0", "M1")};
+    a.manager.load();
+    const QAbstractItemModel& apps = *a.manager.apps();
+    const auto version = [&apps](const QString& repo) {
+        return at(apps, rowOf(apps, "wallet_ui", repo), "version").toString();
+    };
+    a.manager.selectVersion("wallet_ui", kDefault, "1.0.0");
+    CHECK_EQ(version(kDefault), QStringLiteral("2.0.0"));
+    a.manager.showDetails("wallet_ui", kDefault);
+    a.manager.selectVersion("wallet_ui", kMine, "1.0.0");
+    CHECK_EQ(version(kMine), QStringLiteral("2.0.0"));
+    CHECK_EQ(a.manager.details().value("version").toString(), QStringLiteral("2.0.0"));
+    a.manager.selectVersion("wallet_ui", kDefault, "1.0.0");
+    CHECK_EQ(a.manager.details().value("version").toString(), QStringLiteral("1.0.0"));
+}
+
+// A version for a package the details don't show is no pick: it would pin
+// that package once an optional one ticked later brought it.
+TEST(a_version_for_a_package_the_details_dont_show_is_no_pick) {
+    App a;
+    a.modules.catalog = {offering(app(kDefault, "chat_ui", "1.0.0", "C"), {"rln"}),
+                         catalogRow(kDefault, "rln", "1.0.0", "R", {dep("zk")}, kHere, "core"),
+                         withOlderVersion(catalogRow(kDefault, "zk", "2.0.0", "Z2", {}, kHere, "core"),
+                                          "1.0.0", "Z1")};
+    a.modules.addInstalled("chat_ui", "1.0.0", "C");
+    a.manager.load();
+    a.manager.showDetails("chat_ui", kDefault);
+    const auto entry = [&a](const QString& name) {
+        for (const QVariant& v : a.manager.details().value("packages").toList())
+            if (v.toMap().value("name").toString() == name) return v.toMap();
+        return QVariantMap{};
+    };
+    // Installed, its optional rln starts unticked: nothing brings zk yet.
+    CHECK(entry("zk").isEmpty());
+    a.manager.selectVersion("zk", kDefault, "1.0.0");
+    a.manager.setOptional("rln", true);
+    CHECK_EQ(entry("zk").value("version").toString(), QStringLiteral("2.0.0"));
 }
 
 // ── Loading ──────────────────────────────────────────────────────────────

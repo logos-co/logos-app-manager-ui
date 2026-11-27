@@ -6,6 +6,7 @@ import Logos.Controls
 import Logos.Icons
 import Logos.Theme
 
+import "AppActions.js" as AppActions
 import "Installer/Downloads.js" as Downloads
 import "Installer/Stages.js" as Stages
 import "Installer/Types.js" as Types
@@ -41,11 +42,7 @@ ItemDelegate {
             root.appData && root.appData.planInstallStage !== undefined
                 ? root.appData.planInstallStage
                 : Types.InstallStage.None
-        readonly property bool isInstalling:
-            d.installStage === Types.InstallStage.Downloading
-            || d.installStage === Types.InstallStage.Downloaded
-            || d.installStage === Types.InstallStage.Queued
-            || d.installStage === Types.InstallStage.Installing
+        readonly property bool isInstalling: AppActions.busy(d.installStage)
         // What the badge offers for the app's status.
         readonly property int statusAction:
             d.installStatus === Types.InstallStatus.UpgradeAvailable   ? Types.RowAction.Upgrade
@@ -120,6 +117,7 @@ ItemDelegate {
                 installStage:  d.installStage,
                 installStatus: d.installStatus,
                 installType:   d.installType,
+                rowAction:     root.appData ? root.appData.rowAction : undefined,
             };
         }
     }

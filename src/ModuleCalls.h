@@ -24,6 +24,9 @@ public:
     void getInstalledPackages(std::function<void(const QVariantList&, bool)> done) override;
     void getValidVariants(std::function<void(const QStringList&, bool)> done) override;
     void listTrustedKeys(std::function<void(const QVariantList&, bool)> done) override;
+    // package_manager.resolveFlatDependencies(name, true): every package
+    // `name` needs, and what those need, each with its `status`.
+    void resolveFlatDependencies(const QString& name, std::function<void(const QVariantList&, bool)> done);
 
     void downloadPinned(const QString& repositoryUrl, const QString& name, const QString& version,
                         const QString& rootHash,

@@ -53,12 +53,31 @@ Rectangle {
         onCategoriesChanged: if (categories.indexOf(category) < 0) category = "All"
 
         readonly property int repositoryCount: root.backend ? root.backend.repositoryCount || 0 : 0
+        readonly property int enabledRepositoryCount:
+            root.backend ? root.backend.enabledRepositoryCount || 0 : 0
+        readonly property var unreachableRepositories:
+            root.backend && root.backend.unreachableRepositories ? root.backend.unreachableRepositories : []
         readonly property int visibleCount: root.backend ? root.backend.visibleCount || 0 : 0
-        readonly property int localCount: root.backend ? root.backend.localCount || 0 : 0
+        readonly property int appCount: root.backend ? root.backend.appCount || 0 : 0
+        readonly property int availableCount: root.backend ? root.backend.availableCount || 0 : 0
         readonly property string hostVariant: root.backend ? root.backend.hostVariant || "" : ""
         // The catalog's first read failed: nothing is known, not "none".
         readonly property bool loadFailed: !!root.backend && root.backend.loaded !== true
                                            && !!root.backend.loadError && !root.loading
+        // Read, and not being read again: what the page says of it stands.
+        readonly property bool settled: !!root.backend && root.backend.loaded === true && !root.loading
+        // No app at all, whatever the filters, and why; "" with apps.
+        readonly property string emptyCatalog: !settled || appCount > 0 ? ""
+            : repositoryCount === 0 ? "noRepositories"
+            : enabledRepositoryCount === 0 ? "repositoriesOff"
+            : unreachableRepositories.length > 0 ? "unreachable"
+            : "noApps"
+        // Apps, none of them listed, and why; "" otherwise.
+        readonly property string emptyList: !settled || appCount === 0 || visibleCount > 0 ? ""
+            : searchText.length > 0 ? "search"
+            : categoryIndex !== 0 || installState !== 0 ? "filters"
+            : !showUnavailable && availableCount === 0 ? "platform"
+            : ""
 
         // The filters live in the backend, which narrows `apps`.
         function push() {
@@ -287,8 +306,7 @@ Rectangle {
                             objectName: "appManager.noReposView"
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            visible: d.repositoryCount === 0 && d.localCount === 0 && !root.loading
-                                     && !d.loadFailed
+                            visible: d.emptyCatalog === "noRepositories"
                             title: qsTr("No repositories configured")
                             message: qsTr("Add a package repository to browse and install apps.")
                             rightActions: [
@@ -300,12 +318,63 @@ Rectangle {
                             ]
                         }
 
+                        LogosStateView {
+                            objectName: "appManager.repositoriesOffView"
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: d.emptyCatalog === "repositoriesOff"
+                            title: qsTr("All repositories are turned off")
+                            message: qsTr("Turn one on to browse and install apps.")
+                            rightActions: [
+                                LogosButton {
+                                    objectName: "appManager.repositoriesOffView.manage"
+                                    text: qsTr("Manage Repositories")
+                                    onClicked: root.repositoriesRequested()
+                                }
+                            ]
+                        }
+
+                        // A repository whose own address couldn't be read has
+                        // nothing in the catalog: not "nothing for this platform".
+                        LogosStateView {
+                            objectName: "appManager.unreachableView"
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: d.emptyCatalog === "unreachable"
+                            title: qsTr("Couldn't reach the repositories")
+                            message: qsTr("Couldn't read %1. Check your connection, then try again.")
+                                         .arg(d.unreachableRepositories.join(", "))
+                            rightActions: [
+                                LogosButton {
+                                    objectName: "appManager.unreachableView.retry"
+                                    text: qsTr("Try again")
+                                    onClicked: if (root.backend) root.backend.refresh()
+                                }
+                            ]
+                        }
+
+                        LogosStateView {
+                            objectName: "appManager.noAppsView"
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: d.emptyCatalog === "noApps"
+                            title: qsTr("No apps in your repositories")
+                            message: qsTr("The repositories turned on publish no apps yet.")
+                            rightActions: [
+                                LogosButton {
+                                    objectName: "appManager.noAppsView.manage"
+                                    text: qsTr("Manage Repositories")
+                                    onClicked: root.repositoriesRequested()
+                                }
+                            ]
+                        }
+
                         Flickable {
                             id: gridScroll
                             objectName: "appManager.scroll"
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            visible: d.repositoryCount > 0 || d.localCount > 0 || root.loading
+                            visible: !d.loadFailed && d.emptyCatalog === ""
                             clip: true
                             contentWidth: width
                             contentHeight: listColumn.implicitHeight
@@ -345,8 +414,7 @@ Rectangle {
                                     objectName: "appManager.emptyView"
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: gridScroll.height
-                                    visible: d.searchText.length > 0 && d.visibleCount === 0
-                                             && !!root.backend
+                                    visible: d.emptyList === "search"
                                     title: qsTr("No apps match your search.")
                                     message: qsTr("Try a different search term.")
                                 }
@@ -356,9 +424,7 @@ Rectangle {
                                     objectName: "appManager.noMatchView"
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: gridScroll.height
-                                    visible: d.searchText.length === 0 && d.visibleCount === 0
-                                             && (d.categoryIndex !== 0 || d.installState !== 0)
-                                             && !root.loading && !!root.backend
+                                    visible: d.emptyList === "filters"
                                     title: qsTr("No apps match these filters.")
                                     rightActions: [
                                         LogosButton {
@@ -376,15 +442,7 @@ Rectangle {
                                     objectName: "appManager.noneForPlatformView"
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: gridScroll.height
-                                    // Only with no filter that could explain it.
-                                    visible: d.searchText.length === 0
-                                             && d.categoryIndex === 0
-                                             && d.installState === 0
-                                             && !d.showUnavailable
-                                             && !root.loading
-                                             && d.repositoryCount > 0
-                                             && d.visibleCount === 0
-                                             && !!root.backend
+                                    visible: d.emptyList === "platform"
 
                                     readonly property var words: Availability.nothingForThisPlatform(
                                         d.hostVariant.startsWith("unknown") ? "" : d.hostVariant)

@@ -3,6 +3,7 @@
 #include <logos/installer/IconFetcher.h>
 #include <logos/installer/Installer.h>
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QSet>
@@ -46,6 +47,15 @@ public:
     void setModules(logos::installer::PackageModules* packages,
                     logos::installer::InstallModules* installs,
                     logos::installer::Consent* consent);
+    // package_manager's resolveFlatDependencies(name, true): a row for each
+    // package `name` needs, with its `status` and whether only an optional
+    // dependency asks for it (`optional`); `read` false when the call failed.
+    // Each load reads it for every installed app before it ends: one missing
+    // a package it needs is not installed, as for Basecamp, which won't open
+    // it and hands it here.
+    using ReadDependencies = std::function<void(
+        const QString& name, std::function<void(const QVariantList& dependencies, bool read)> done)>;
+    void setReadDependencies(ReadDependencies read) { m_readDependencies = std::move(read); }
     // For tests: how icons are fetched, how soon a burst of events reloads,
     // and how long a finished install's tile says Installed.
     void setIconFetch(logos::installer::IconFetcher::Fetch fetch);
@@ -81,9 +91,12 @@ public:
     bool showUnavailable() const;
     // "All", then each category among the apps.
     QStringList categories() const;
-    // The apps listed, and those of them no repository publishes.
+    // The apps listed; and whatever the filters, every app from an enabled
+    // repository or a file, and those of them this host can install or has
+    // installed.
     int visibleCount() const;
-    int localCount() const;
+    int appCount() const { return m_appCount; }
+    int availableCount() const { return m_availableCount; }
 
     bool loading() const;
     // The catalog has been read once; what the last read couldn't read, or "".
@@ -94,6 +107,10 @@ public:
     QString storageState() const;
     QString hostVariant() const;
     int repositoryCount() const;
+    // Those turned on, and the names of those of them whose own address
+    // couldn't be read: the catalog has nothing of theirs.
+    int enabledRepositoryCount() const { return m_enabledRepositoryCount; }
+    QStringList unreachableRepositories() const { return m_unreachableRepositories; }
 
     // What the person asked for. Each asks Basecamp first; how it ended
     // comes as finished(). False when there is no such app or nothing to do.
@@ -131,7 +148,7 @@ public:
     // The version of the open app (its row's), or of a package it brings, and
     // whether an optional package comes with it: they go to Basecamp with the
     // open app's install, which plans with them. Forgotten when the details
-    // close.
+    // close. A version for anything the details don't show is no pick.
     void selectVersion(const QString& name, const QString& repositoryUrl, const QString& version);
     void setOptional(const QString& name, bool selected);
 
@@ -168,11 +185,20 @@ private:
     bool openByName(const QString& name, bool install, const QString& repositoryUrl = {});
     // An app: ui_qml, and not the shell.
     static bool isApp(const QVariantMap& row);
+    static bool isApp(const QString& type, const QString& name);
     // From a repository that is enabled, or from a file.
     bool fromEnabledSource(const QVariantMap& row) const;
+    bool fromEnabledSource(const QString& repositoryUrl) const;
     void takeDeliveries();
     void applyRepositories();
+    // What the installed apps miss (setReadDependencies()), into the model;
+    // then the load is over.
+    void readMissingDependencies();
+    void applyMissingDependencies(const QStringList& apps, const QHash<QString, QStringList>& missing);
+    void recount();
     void refreshDetails();
+    // A package the open details show besides the app, from `repositoryUrl`.
+    bool showsPackage(const QString& name, const QString& repositoryUrl) const;
     // Who the person trusts (PackageModules::listTrustedKeys()), read again
     // for each details shown and after what is installed changes: trusting a
     // publisher comes with an install.
@@ -197,10 +223,20 @@ private:
     QVariantList m_trustedKeys;
     bool m_keysRead = false;      // the last answer read it
     bool m_keysAnswered = false;  // any answer came
+    int m_keyReads = 0;           // the newest asked; only its answer counts
     int m_debounceMs = -1;
     int m_clearDelayMs = -1;
 
+    ReadDependencies m_readDependencies;
+    int m_dependencyReads = 0;    // the newest asked; only its answers count
+    bool m_readingDependencies = false;
+    QSet<QString> m_missingDependencies;  // the apps the model has missing some
+    int m_appCount = 0;
+    int m_availableCount = 0;
+
     QSet<QString> m_disabledRepositories;
+    int m_enabledRepositoryCount = 0;
+    QStringList m_unreachableRepositories;
     QString m_category;
     QStringList m_categories{QStringLiteral("All")};
     QList<Delivery> m_deliveries;

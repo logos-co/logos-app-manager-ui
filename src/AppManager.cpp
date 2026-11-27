@@ -15,6 +15,7 @@
 #include <QPointer>
 #include <QTimer>
 
+#include <memory>
 #include <utility>
 
 namespace appmanager {
@@ -38,6 +39,20 @@ bool installableHere(const QVariantMap& row)
 {
     return row.value(QStringLiteral("isVariantAvailable")).toBool()
         && row.value(QStringLiteral("isSourceAvailable"), true).toBool();
+}
+
+// What a resolveFlatDependencies() answer says isn't installed. Not what only
+// an optional dependency asks for: Basecamp opens the app without it.
+QStringList missingOf(const QVariantList& dependencies)
+{
+    QStringList missing;
+    for (const QVariant& v : dependencies) {
+        const QVariantMap d = v.toMap();
+        if (str(d, "status") == QLatin1String("not_installed")
+            && !d.value(QStringLiteral("optional")).toBool())
+            missing << str(d, "name");
+    }
+    return missing;
 }
 
 }  // namespace
@@ -72,11 +87,17 @@ AppManager::AppManager(QObject* parent)
     connect(m_online, &OnlineWatch::onlineChanged, this, &AppManager::onlineChanged);
     connect(m_model, &PackageModel::hostVariantChanged, this, &AppManager::hostVariantChanged);
 
-    // The open app's details follow its row and the rows of what it brings.
-    connect(m_model, &QAbstractItemModel::dataChanged, this, [this] {
-        if (!m_detailsName.isEmpty()) refreshDetails();
-    });
+    // The open app's details follow its row and the rows of what it brings;
+    // the counts, whether a row is an app the list could show.
+    connect(m_model, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
+                if (roles.isEmpty() || roles.contains(PackageModel::IsInstalledRole)
+                    || roles.contains(PackageModel::HasInstallableVersionRole))
+                    recount();
+                if (!m_detailsName.isEmpty()) refreshDetails();
+            });
     auto follow = [this] {
+        recount();
         if (!m_detailsName.isEmpty()) refreshDetails();
     };
     connect(m_model, &QAbstractItemModel::rowsInserted, this, follow);
@@ -96,10 +117,15 @@ void AppManager::setModules(PackageModules* packages, InstallModules* installs, 
     m_installer->setPackages(m_model);
     if (m_clearDelayMs >= 0) m_installer->setClearDelay(m_clearDelayMs);
 
-    connect(m_catalog, &CatalogClient::loadingChanged, this, &AppManager::loadingChanged);
-    connect(m_catalog, &CatalogClient::loaded, this, &AppManager::takeDeliveries);
+    // A load that read everything ends once what its installed apps miss is
+    // read too; one that failed ends at once.
+    connect(m_catalog, &CatalogClient::loadingChanged, this, [this] {
+        if (m_catalog->isLoading()) emit loadingChanged();
+    });
     connect(m_catalog, &CatalogClient::loaded, this, &AppManager::loadStateChanged);
+    connect(m_catalog, &CatalogClient::loaded, this, &AppManager::readMissingDependencies);
     connect(m_catalog, &CatalogClient::loadFailed, this, [this] {
+        emit loadingChanged();
         emit loadStateChanged();
         emit loadFailed(m_catalog->loadError());
     });
@@ -111,6 +137,9 @@ void AppManager::setModules(PackageModules* packages, InstallModules* installs, 
     connect(m_catalog, &CatalogClient::storageStateChanged, this, &AppManager::downloadStateChanged);
     connect(m_installer, &Installer::finished, this,
             [this](const QString& name, Installer::Outcome outcome, const QString& error) {
+                // Trusting a publisher comes with an install, which may then
+                // fail with nothing installed.
+                if (!m_detailsName.isEmpty()) readTrustedKeys();
                 emit finished(name, static_cast<int>(outcome), error);
             });
 }
@@ -250,14 +279,9 @@ int AppManager::visibleCount() const
     return m_sections->appCount();
 }
 
-int AppManager::localCount() const
-{
-    return m_sections->countOf(kLocal);
-}
-
 bool AppManager::loading() const
 {
-    return m_catalog && m_catalog->isLoading();
+    return m_catalog && (m_catalog->isLoading() || m_readingDependencies);
 }
 
 bool AppManager::loaded() const
@@ -395,7 +419,7 @@ bool AppManager::deliver(const QString& intent, const QVariantMap& params, const
     // Basecamp's own request is the person's click there. Another app's only
     // shows the app: its install is the person's to ask for, here.
     const bool andInstall = requester == kShell;
-    if (m_catalog && m_catalog->hasLoaded() && !m_catalog->isLoading()) {
+    if (m_catalog && m_catalog->hasLoaded() && !loading()) {
         const bool taken = openByName(name, andInstall, repositoryUrl);
         respond(taken, taken ? QString() : QStringLiteral("failed"));
         return true;
@@ -443,6 +467,10 @@ void AppManager::closeDetails()
 
 void AppManager::selectVersion(const QString& name, const QString& repositoryUrl, const QString& version)
 {
+    // Of what the open details show: two repositories can list the same name.
+    const bool own = !m_detailsName.isEmpty() && name == m_detailsName
+        && repositoryUrl == m_detailsRepositoryUrl;
+    if (!own && !showsPackage(name, repositoryUrl)) return;
     const int row = rowOf(name, repositoryUrl);
     if (row < 0 || version.isEmpty()) return;
     // By its name, not its place: a list that changed since the view showed
@@ -454,7 +482,7 @@ void AppManager::selectVersion(const QString& name, const QString& repositoryUrl
     if (index < 0) return;
     // The app's own version is its row's, as its tile shows it; another
     // package's is only the details'.
-    if (name == m_detailsName || m_detailsName.isEmpty()) {
+    if (own) {
         m_model->selectVersion(row, index);
         return;
     }
@@ -541,34 +569,143 @@ int AppManager::rowOf(const QString& name, const QString& repositoryUrl) const
 
 void AppManager::applyRepositories()
 {
+    const QVariantMap labels = m_catalog->repositoryLabels();
     m_filter->setSourceOrder(m_catalog->sourceOrder());
-    m_sections->setTitles(m_catalog->repositoryLabels());
+    m_sections->setTitles(labels);
     QStringList hidden;
+    QStringList unreachable;
+    int enabled = 0;
     for (const QVariant& v : m_catalog->repositories()) {
         const QVariantMap r = v.toMap();
-        if (!r.value(QStringLiteral("enabled"), true).toBool()) hidden << str(r, "url");
+        const QString url = str(r, "url");
+        if (!r.value(QStringLiteral("enabled"), true).toBool()) {
+            hidden << url;
+            continue;
+        }
+        ++enabled;
+        if (!str(r, "resolveError").isEmpty()) unreachable << labels.value(url, url).toString();
     }
+    m_enabledRepositoryCount = enabled;
+    m_unreachableRepositories = unreachable;
     m_disabledRepositories = QSet<QString>(hidden.cbegin(), hidden.cend());
     m_sections->setHidden(hidden);
+    recount();
+    // Turned off with its details open: they close, as its apps leave the list.
+    refreshDetails();
+}
+
+void AppManager::readMissingDependencies()
+{
+    QStringList apps;
+    if (m_readDependencies) {
+        for (int r = 0; r < m_model->rowCount(); ++r) {
+            const QVariantMap row = m_model->rowAt(r);
+            const QString name = str(row, "name");
+            if (isApp(row) && isInstalledRow(row) && !apps.contains(name)) apps << name;
+        }
+    }
+    const int reading = ++m_dependencyReads;
+    m_readingDependencies = true;
+    const auto missing = std::make_shared<QHash<QString, QStringList>>();
+    // One for each app and one for this loop, so an answer that comes at once
+    // can't end it early.
+    const auto left = std::make_shared<int>(int(apps.size()) + 1);
+    QPointer<AppManager> self(this);
+    const auto answered = [self, reading, apps, missing, left] {
+        if (--*left > 0 || !self || reading != self->m_dependencyReads) return;
+        self->applyMissingDependencies(apps, *missing);
+    };
+    for (const QString& name : apps) {
+        m_readDependencies(name, [name, missing, answered](const QVariantList& dependencies, bool read) {
+            // Unread, an app keeps what the last read said.
+            if (read) missing->insert(name, missingOf(dependencies));
+            answered();
+        });
+    }
+    answered();
+}
+
+void AppManager::applyMissingDependencies(const QStringList& apps,
+                                          const QHash<QString, QStringList>& missing)
+{
+    const QSet<QString> marked = m_missingDependencies;
+    for (const QString& name : marked) {
+        if (apps.contains(name)) continue;
+        m_model->setMissingDependencies(name, {});
+        m_missingDependencies.remove(name);
+    }
+    for (auto it = missing.cbegin(); it != missing.cend(); ++it) {
+        m_model->setMissingDependencies(it.key(), it.value());
+        if (it.value().isEmpty()) m_missingDependencies.remove(it.key());
+        else m_missingDependencies.insert(it.key());
+    }
+    m_readingDependencies = false;
+    emit loadingChanged();
+    // Another load on its way: they wait for it.
+    if (!loading()) takeDeliveries();
+}
+
+void AppManager::recount()
+{
+    int apps = 0;
+    int available = 0;
+    for (int r = 0; r < m_model->rowCount(); ++r) {
+        const QModelIndex at = m_model->index(r);
+        if (!isApp(at.data(PackageModel::TypeRole).toString(), at.data(PackageModel::NameRole).toString())
+            || !fromEnabledSource(at.data(PackageModel::RepositoryUrlRole).toString()))
+            continue;
+        ++apps;
+        // As the list hides it when it doesn't show unavailable apps.
+        if (at.data(PackageModel::HasInstallableVersionRole).toBool()
+            || at.data(PackageModel::IsInstalledRole).toBool())
+            ++available;
+    }
+    if (apps == m_appCount && available == m_availableCount) return;
+    m_appCount = apps;
+    m_availableCount = available;
+    emit countsChanged();
 }
 
 bool AppManager::isApp(const QVariantMap& row)
 {
-    return str(row, "type") == QLatin1String("ui_qml") && str(row, "name") != kShell;
+    return isApp(str(row, "type"), str(row, "name"));
+}
+
+bool AppManager::isApp(const QString& type, const QString& name)
+{
+    return type == QLatin1String("ui_qml") && name != kShell;
 }
 
 bool AppManager::fromEnabledSource(const QVariantMap& row) const
 {
-    const QString repositoryUrl = str(row, "repositoryUrl");
+    return fromEnabledSource(str(row, "repositoryUrl"));
+}
+
+bool AppManager::fromEnabledSource(const QString& repositoryUrl) const
+{
     return repositoryUrl.isEmpty() || !m_disabledRepositories.contains(repositoryUrl);
+}
+
+bool AppManager::showsPackage(const QString& name, const QString& repositoryUrl) const
+{
+    for (const QVariant& v : m_details.value(QStringLiteral("packages")).toList()) {
+        const QVariantMap p = v.toMap();
+        if (!p.value(QStringLiteral("subject")).toBool() && str(p, "name") == name
+            && str(p, "repositoryUrl") == repositoryUrl)
+            return true;
+    }
+    return false;
 }
 
 void AppManager::readTrustedKeys()
 {
     if (!m_packages) return;
+    // An older read may answer last, with the keyring as it was before.
+    const int asked = ++m_keyReads;
     QPointer<AppManager> self(this);
-    m_packages->listTrustedKeys([self](const QVariantList& keys, bool read) {
-        if (!self || (self->m_keysAnswered && keys == self->m_trustedKeys && read == self->m_keysRead))
+    m_packages->listTrustedKeys([self, asked](const QVariantList& keys, bool read) {
+        if (!self || asked != self->m_keyReads
+            || (self->m_keysAnswered && keys == self->m_trustedKeys && read == self->m_keysRead))
             return;
         self->m_trustedKeys = keys;
         self->m_keysRead = read;
@@ -581,8 +718,9 @@ void AppManager::refreshDetails()
 {
     QVariantMap details;
     const int row = rowOf(m_detailsName, m_detailsRepositoryUrl);
-    if (row >= 0) {
-        details = m_model->rowAt(row);
+    const QVariantMap shown = row >= 0 ? m_model->rowAt(row) : QVariantMap();
+    if (row >= 0 && fromEnabledSource(shown)) {
+        details = shown;
         QVariantList packages = m_model->packagesBroughtBy(row, m_optional, m_versions);
         // Nothing said of who signed what until the keyring answers.
         if (m_keysAnswered) {
@@ -600,7 +738,8 @@ void AppManager::refreshDetails()
         }
         details.insert(QStringLiteral("packages"), packages);
     } else if (!m_detailsName.isEmpty()) {
-        // Gone from every list: closed for good, not reopened if it comes back.
+        // Gone from every list, or its repository turned off: closed for
+        // good, not reopened if it comes back.
         forgetPicks();
         m_detailsName.clear();
         m_detailsRepositoryUrl.clear();

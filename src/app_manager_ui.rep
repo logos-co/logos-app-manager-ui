@@ -22,11 +22,18 @@ class AppManagerUi
     // This host's variant, for "nothing for this platform".
     PROP(QString hostVariant READONLY)
     PROP(int repositoryCount READONLY)
+    // Those turned on, and the names of those of them whose own address
+    // couldn't be read: the catalog has nothing of theirs.
+    PROP(int enabledRepositoryCount READONLY)
+    PROP(QStringList unreachableRepositories READONLY)
     // "All", then each category among the apps.
     PROP(QStringList categories READONLY)
-    // The apps listed, and those of them no repository publishes.
+    // The apps listed; and whatever the filters, every app from an enabled
+    // repository or a file, and those of them this host can install or has
+    // installed. With none listed, the page says why.
     PROP(int visibleCount READONLY)
-    PROP(int localCount READONLY)
+    PROP(int appCount READONLY)
+    PROP(int availableCount READONLY)
 
     // The filters, pushed by the view.
     PROP(QString searchText)

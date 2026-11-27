@@ -42,13 +42,17 @@ AppManagerBackend::AppManagerBackend(QObject* parent)
     });
     connect(m_manager, &AppManager::hostVariantChanged, this,
             [this] { setHostVariant(m_manager->hostVariant()); });
-    connect(m_manager, &AppManager::repositoriesChanged, this,
-            [this] { setRepositoryCount(m_manager->repositoryCount()); });
+    connect(m_manager, &AppManager::repositoriesChanged, this, [this] {
+        setRepositoryCount(m_manager->repositoryCount());
+        setEnabledRepositoryCount(m_manager->enabledRepositoryCount());
+        setUnreachableRepositories(m_manager->unreachableRepositories());
+    });
     connect(m_manager, &AppManager::categoriesChanged, this,
             [this] { setCategories(m_manager->categories()); });
     connect(m_manager, &AppManager::countsChanged, this, [this] {
         setVisibleCount(m_manager->visibleCount());
-        setLocalCount(m_manager->localCount());
+        setAppCount(m_manager->appCount());
+        setAvailableCount(m_manager->availableCount());
     });
     connect(m_manager, &AppManager::detailsChanged, this, [this] { setDetails(m_manager->details()); });
     connect(m_manager, &AppManager::finished, this,
@@ -125,6 +129,10 @@ void AppManagerBackend::onContextReady()
     });
 
     m_manager->setModules(m_calls.get(), m_calls.get(), m_consent);
+    m_manager->setReadDependencies(
+        [calls = m_calls.get()](const QString& name, std::function<void(const QVariantList&, bool)> done) {
+            calls->resolveFlatDependencies(name, std::move(done));
+        });
     const std::string dataDir = instancePersistencePath();
     if (!dataDir.empty())
         m_manager->setIconCacheDirectory(
@@ -224,8 +232,11 @@ void AppManagerBackend::mirror()
     setStorageState(m_manager->storageState());
     setHostVariant(m_manager->hostVariant());
     setRepositoryCount(m_manager->repositoryCount());
+    setEnabledRepositoryCount(m_manager->enabledRepositoryCount());
+    setUnreachableRepositories(m_manager->unreachableRepositories());
     setCategories(m_manager->categories());
     setVisibleCount(m_manager->visibleCount());
-    setLocalCount(m_manager->localCount());
+    setAppCount(m_manager->appCount());
+    setAvailableCount(m_manager->availableCount());
     setDetails(m_manager->details());
 }
