@@ -382,7 +382,7 @@ Rectangle {
 
                             ScrollBar.vertical: LogosScrollBar {
                                 policy: ScrollBar.AsNeeded
-                                rightPadding: 4
+                                rightPadding: Theme.spacing.tiny
                             }
 
                             ColumnLayout {
