@@ -360,6 +360,35 @@ TEST(another_apps_delivery_shows_the_app_and_asks_basecamp_nothing) {
     CHECK(b.basecamp.asked.isEmpty());
 }
 
+// The backend keeps to apps whatever asks it, not only what the page lists.
+TEST(only_an_app_installs_uninstalls_or_shows_its_details) {
+    App a;
+    a.modules.catalog = {withOlderVersion(catalogRow(kDefault, "signer", "2.0.0", "S2", {}, kHere, "core"),
+                                          "1.0.0", "S1")};
+    a.modules.addInstalled("signer", "1.0.0", "S1");
+    a.manager.load();
+    CHECK(!a.manager.install("signer", kDefault));
+    CHECK(!a.manager.uninstall("signer", kDefault));
+    a.manager.showDetails("signer", kDefault);
+    CHECK(a.manager.details().isEmpty());
+    CHECK(a.basecamp.asked.isEmpty());
+    CHECK(a.changes().isEmpty());
+}
+
+// What the page hides of a disabled repository, the backend doesn't install
+// or open either, whatever asks.
+TEST(nothing_installs_or_opens_from_a_disabled_repository) {
+    App a;
+    a.modules.repositories[1] = QVariantMap{{"url", kMine}, {"displayName", "Mine"}, {"enabled", false}};
+    a.modules.catalog = {app(kMine, "notes_ui", "1.0.0", "N")};
+    a.manager.load();
+    CHECK(!a.manager.install("notes_ui", kMine));
+    a.manager.showDetails("notes_ui", kMine);
+    CHECK(a.manager.details().isEmpty());
+    CHECK(!shellAsks(a, "notes_ui"));
+    CHECK(a.basecamp.asked.isEmpty());
+}
+
 // By name, App Manager finds apps only, as its page lists them.
 TEST(by_name_only_an_app_is_found) {
     App a;

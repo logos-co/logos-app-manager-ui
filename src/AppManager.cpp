@@ -281,6 +281,7 @@ bool AppManager::install(const QString& name, const QString& repositoryUrl)
     const int row = rowOf(name, repositoryUrl);
     if (row < 0) return false;
     const QVariantMap r = m_model->rowAt(row);
+    if (!isApp(r) || !fromEnabledSource(r)) return false;
     const QString repo = str(r, "repositoryUrl");
     // Installed from a file: no repository to install from.
     if (repo.isEmpty()) return false;
@@ -327,7 +328,7 @@ bool AppManager::openByName(const QString& name, bool andInstall)
     for (const QString& key : m_catalog->sourceOrder()) {
         const int row = key == kLocal ? -1 : m_model->rowOf(name, key);
         // Apps only, as the page lists them.
-        if (row < 0 || str(m_model->rowAt(row), "type") != QLatin1String("ui_qml")) continue;
+        if (row < 0 || !isApp(m_model->rowAt(row)) || !fromEnabledSource(m_model->rowAt(row))) continue;
         // The person sees what was asked for, installed already or not.
         showDetails(name, key);
         if (andInstall) install(name, key);
@@ -343,7 +344,7 @@ bool AppManager::uninstall(const QString& name, const QString& repositoryUrl)
     if (row < 0) return false;
     const QVariantMap r = m_model->rowAt(row);
     const auto status = static_cast<InstallStatus>(r.value(QStringLiteral("installStatus")).toInt());
-    if (str(r, "installType") != QLatin1String("user") || !isInstalledRow(r)
+    if (!isApp(r) || str(r, "installType") != QLatin1String("user") || !isInstalledRow(r)
         || status == InstallStatus::Installing)
         return false;
     m_installer->uninstall({name});
@@ -398,6 +399,8 @@ void AppManager::takeDeliveries()
 
 void AppManager::showDetails(const QString& name, const QString& repositoryUrl)
 {
+    const int row = rowOf(name, repositoryUrl);
+    if (row < 0 || !isApp(m_model->rowAt(row)) || !fromEnabledSource(m_model->rowAt(row))) return;
     if (name != m_detailsName || repositoryUrl != m_detailsRepositoryUrl) forgetPicks();
     m_detailsName = name;
     m_detailsRepositoryUrl = repositoryUrl;
@@ -508,7 +511,19 @@ void AppManager::applyRepositories()
         const QVariantMap r = v.toMap();
         if (!r.value(QStringLiteral("enabled"), true).toBool()) hidden << str(r, "url");
     }
+    m_disabledRepositories = QSet<QString>(hidden.cbegin(), hidden.cend());
     m_sections->setHidden(hidden);
+}
+
+bool AppManager::isApp(const QVariantMap& row)
+{
+    return str(row, "type") == QLatin1String("ui_qml") && str(row, "name") != kShell;
+}
+
+bool AppManager::fromEnabledSource(const QVariantMap& row) const
+{
+    const QString repositoryUrl = str(row, "repositoryUrl");
+    return repositoryUrl.isEmpty() || !m_disabledRepositories.contains(repositoryUrl);
 }
 
 void AppManager::refreshDetails()

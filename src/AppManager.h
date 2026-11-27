@@ -5,6 +5,7 @@
 
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
@@ -96,6 +97,8 @@ public:
     // install() does what the app's row offers: install it, upgrade,
     // downgrade or reinstall it to the version it shows, or bring in what
     // it is missing.
+    // Only an app (ui_qml, not the shell) installs, uninstalls or opens its
+    // details, and installs or opens only from a repository that is enabled.
     bool install(const QString& name, const QString& repositoryUrl);
     bool uninstall(const QString& name, const QString& repositoryUrl);
 
@@ -153,6 +156,10 @@ private:
     // `name`'s details, from the first repository that has it as an app,
     // and with `install`, install() too.
     bool openByName(const QString& name, bool install);
+    // An app: ui_qml, and not the shell.
+    static bool isApp(const QVariantMap& row);
+    // From a repository that is enabled, or from a file.
+    bool fromEnabledSource(const QVariantMap& row) const;
     void takeDeliveries();
     void applyRepositories();
     void refreshDetails();
@@ -174,6 +181,7 @@ private:
     int m_debounceMs = -1;
     int m_clearDelayMs = -1;
 
+    QSet<QString> m_disabledRepositories;
     QString m_category;
     QStringList m_categories{QStringLiteral("All")};
     QList<Delivery> m_deliveries;
