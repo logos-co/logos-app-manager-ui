@@ -351,6 +351,27 @@ Rectangle {
                                     message: qsTr("Try a different search term.")
                                 }
 
+                                // A category or install state that leaves nothing.
+                                LogosStateView {
+                                    objectName: "appManager.noMatchView"
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: gridScroll.height
+                                    visible: d.searchText.length === 0 && d.visibleCount === 0
+                                             && (d.categoryIndex !== 0 || d.installState !== 0)
+                                             && !root.loading && !!root.backend
+                                    title: qsTr("No apps match these filters.")
+                                    rightActions: [
+                                        LogosButton {
+                                            objectName: "appManager.noMatchView.clear"
+                                            text: qsTr("Clear filters")
+                                            onClicked: {
+                                                d.category = "All"
+                                                panelHeader.installStateIndex = 0
+                                            }
+                                        }
+                                    ]
+                                }
+
                                 LogosStateView {
                                     objectName: "appManager.noneForPlatformView"
                                     Layout.fillWidth: true
