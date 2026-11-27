@@ -260,17 +260,26 @@ TEST(a_current_app_offers_nothing_to_install) {
     CHECK(a.basecamp.asked.isEmpty());
 }
 
-TEST(one_request_at_a_time_in_the_order_asked) {
+// Both put to Basecamp at once, the second saying it can wait; one at a
+// time after that, in the order asked: the second, approved for its turn,
+// hands its ticket back once the first is through.
+TEST(each_is_asked_about_at_once_and_goes_in_turn) {
     App a;
     a.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W"), app(kDefault, "chat_ui", "1.0.0", "C")};
     a.manager.load();
     CHECK(a.manager.install("wallet_ui", kDefault));
     CHECK(a.manager.install("chat_ui", kDefault));
-    CHECK_EQ(a.basecamp.asked.size(), 1);
-    a.basecamp.waiting.takeFirst()(fakes::refuse("cancelled"));
+    CHECK_EQ(a.basecamp.asked.size(), 2);
+    CHECK_EQ(a.basecamp.asked.value(1).params.value("name").toString(), QStringLiteral("chat_ui"));
+    CHECK(a.basecamp.asked.value(1).params.value("waits").toBool());
+    a.basecamp.waiting.takeLast()(fakes::approve({{"ticket", "t1"}}));
     SPIN(10);
     CHECK_EQ(a.basecamp.asked.size(), 2);
+    a.basecamp.waiting.takeFirst()(fakes::refuse("cancelled"));
+    SPIN(10);
+    CHECK_EQ(a.basecamp.asked.size(), 3);
     CHECK_EQ(a.lastParams().value("name").toString(), QStringLiteral("chat_ui"));
+    CHECK_EQ(a.lastParams().value("ticket").toString(), QStringLiteral("t1"));
 }
 
 // ── apps.install, delivered by intents_module ────────────────────────────
