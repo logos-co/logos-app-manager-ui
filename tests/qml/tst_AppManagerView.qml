@@ -507,6 +507,20 @@ TestCase {
         compare(find(view, "appManager.noReposView").visible, false)
     }
 
+    // The list area hidden with tiles still in it, a count come before its
+    // rows: they were laid out below 0 wide, and the view hung.
+    function test_a_hidden_list_with_tiles_in_it_does_not_hang() {
+        backend.appCount = 0
+        const view = makeView([Rows.section(Rows.repo, "Logos", 2), Rows.app("wallet_ui"),
+                               Rows.installed("chat_ui")])
+        verify(find(view, "appManager.noAppsView").visible)
+        compare(find(view, "appManager.scroll").visible, false)
+        backend.appCount = 2
+        waitForRendering(view)
+        verify(find(view, "appManager.scroll").visible)
+        find(view, "appManager.app.wallet_ui")
+    }
+
     // Until the catalog is read, nothing is said of what it lacks.
     function test_nothing_is_said_before_the_catalog_is_read() {
         backend.loaded = false

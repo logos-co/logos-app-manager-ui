@@ -123,6 +123,16 @@ TestCase {
         noneOverTheSides(view)
     }
 
+    // Laid out with no width and tiles in it, the list went below 0 wide and
+    // the view hung.
+    function test_no_width_with_tiles_settles() {
+        const view = makeView(0)
+        Theme.viewWidth = 1280
+        view.width = 1280
+        waitForRendering(view)
+        noneOverTheSides(view)
+    }
+
     // No repositories, and a search that finds nothing, fit too.
     function test_empty_states_fit_data() {
         return [360, 390, 700].map(w => ({ tag: String(w), width: w }))

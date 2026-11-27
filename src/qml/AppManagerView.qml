@@ -388,7 +388,9 @@ Rectangle {
                             ColumnLayout {
                                 id: listColumn
                                 x: Theme.spacing.medium
-                                width: gridScroll.width - 2 * Theme.spacing.medium
+                                // Hidden, the area is 0 wide: tiles laid out below
+                                // 0 never settle, and the view hangs.
+                                width: Math.max(0, gridScroll.width - 2 * Theme.spacing.medium)
                                 spacing: 0
 
                                 AppTiles {
