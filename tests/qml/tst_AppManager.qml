@@ -106,4 +106,19 @@ TestCase {
         tryVerify(() => toast.visible)
         compare(toast.message, "the download stopped")
     }
+
+    // A reload that failed keeps the list and says so, each time; a first
+    // load's failure is the page's to say.
+    function test_a_reload_that_failed_says_so() {
+        const app = makeApp()
+        const toast = find(app, "appManager.toast")
+        backend.loaded = false
+        backend.loadFailed("the catalog")
+        compare(toast.visible, false)
+        backend.loaded = true
+        backend.loadFailed("the catalog")
+        tryVerify(() => toast.visible)
+        compare(toast.title, "Couldn't reload the apps")
+        compare(toast.message, "Couldn't read the catalog. The list is the one from before.")
+    }
 }

@@ -353,6 +353,24 @@ TestCase {
         compare(find(view, "appManager.noneForPlatformView").visible, false)
     }
 
+    // A first load that failed knows nothing: not "no repositories".
+    function test_a_first_load_that_failed_says_so_and_retries() {
+        backend.repositoryCount = 0
+        backend.loaded = false
+        backend.loadError = "the catalog"
+        const view = makeView([])
+        const failed = find(view, "appManager.loadErrorView")
+        verify(failed.visible)
+        compare(failed.message, "Couldn't read the catalog.")
+        compare(find(view, "appManager.noReposView").visible, false)
+        mouseClick(find(view, "appManager.loadErrorView.retry"))
+        compare(backend.called("refresh").length, 1)
+        backend.loaded = true
+        backend.loadError = ""
+        compare(failed.visible, false)
+        verify(find(view, "appManager.noReposView").visible)
+    }
+
     // ── Notices ──────────────────────────────────────────────────────────────
 
     function test_downloads_that_cannot_work_say_so() {

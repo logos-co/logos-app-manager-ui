@@ -56,6 +56,9 @@ Rectangle {
         readonly property int visibleCount: root.backend ? root.backend.visibleCount || 0 : 0
         readonly property int localCount: root.backend ? root.backend.localCount || 0 : 0
         readonly property string hostVariant: root.backend ? root.backend.hostVariant || "" : ""
+        // The catalog's first read failed: nothing is known, not "none".
+        readonly property bool loadFailed: !!root.backend && root.backend.loaded !== true
+                                           && !!root.backend.loadError && !root.loading
 
         // The filters live in the backend, which narrows `apps`.
         function push() {
@@ -262,6 +265,22 @@ Rectangle {
                             onShowUnavailableRequested: (show) => d.showUnavailable = show
                         }
 
+                        LogosStateView {
+                            objectName: "appManager.loadErrorView"
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: d.loadFailed
+                            title: qsTr("Couldn't load the apps")
+                            message: d.loadFailed ? qsTr("Couldn't read %1.").arg(root.backend.loadError) : ""
+                            rightActions: [
+                                LogosButton {
+                                    objectName: "appManager.loadErrorView.retry"
+                                    text: qsTr("Try again")
+                                    onClicked: if (root.backend) root.backend.refresh()
+                                }
+                            ]
+                        }
+
                         // No repository, and nothing installed from a file to
                         // show instead.
                         LogosStateView {
@@ -269,6 +288,7 @@ Rectangle {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             visible: d.repositoryCount === 0 && d.localCount === 0 && !root.loading
+                                     && !d.loadFailed
                             title: qsTr("No repositories configured")
                             message: qsTr("Add a package repository to browse and install apps.")
                             rightActions: [

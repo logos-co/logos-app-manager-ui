@@ -691,4 +691,32 @@ TEST(the_download_notice_reads_the_downloader) {
     CHECK(changed.count() > 0);
 }
 
+// ── Loading ──────────────────────────────────────────────────────────────
+
+// A read that failed is not an empty catalog: it says so, and the next good
+// one clears it.
+TEST(a_failed_load_says_so_until_one_reads_everything) {
+    App a;
+    a.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W")};
+    a.modules.failing << "getCatalog";
+    QSignalSpy failed(&a.manager, &AppManager::loadFailed);
+    a.manager.load();
+    CHECK(!a.manager.loaded());
+    CHECK_EQ(a.manager.loadError(), QStringLiteral("the catalog"));
+    CHECK_EQ(failed.count(), 1);
+    CHECK_EQ(failed.at(0).at(0).toString(), QStringLiteral("the catalog"));
+    a.modules.failing.clear();
+    a.manager.refresh();
+    CHECK(a.manager.loaded());
+    CHECK_EQ(a.manager.loadError(), QString());
+    CHECK_EQ(a.lines(), (QStringList{"§Logos 1", "wallet_ui"}));
+    // A reload that fails keeps the list, and says so again.
+    a.modules.failing << "getCatalog";
+    a.manager.refresh();
+    a.manager.refresh();
+    CHECK_EQ(failed.count(), 3);
+    CHECK(a.manager.loaded());
+    CHECK_EQ(a.lines(), (QStringList{"§Logos 1", "wallet_ui"}));
+}
+
 CHECK_MAIN()

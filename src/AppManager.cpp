@@ -94,6 +94,11 @@ void AppManager::setModules(PackageModules* packages, InstallModules* installs, 
 
     connect(m_catalog, &CatalogClient::loadingChanged, this, &AppManager::loadingChanged);
     connect(m_catalog, &CatalogClient::loaded, this, &AppManager::takeDeliveries);
+    connect(m_catalog, &CatalogClient::loaded, this, &AppManager::loadStateChanged);
+    connect(m_catalog, &CatalogClient::loadFailed, this, [this] {
+        emit loadStateChanged();
+        emit loadFailed(m_catalog->loadError());
+    });
     connect(m_catalog, &CatalogClient::repositoriesChanged, this, [this] {
         applyRepositories();
         emit repositoriesChanged();
@@ -248,6 +253,16 @@ int AppManager::localCount() const
 bool AppManager::loading() const
 {
     return m_catalog && m_catalog->isLoading();
+}
+
+bool AppManager::loaded() const
+{
+    return m_catalog && m_catalog->hasLoaded();
+}
+
+QString AppManager::loadError() const
+{
+    return m_catalog ? m_catalog->loadError() : QString();
 }
 
 bool AppManager::online() const

@@ -31,6 +31,10 @@ AppManagerBackend::AppManagerBackend(QObject* parent)
     mirror();
 
     connect(m_manager, &AppManager::loadingChanged, this, [this] { setLoading(m_manager->loading()); });
+    connect(m_manager, &AppManager::loadStateChanged, this, [this] {
+        setLoaded(m_manager->loaded());
+        setLoadError(m_manager->loadError());
+    });
     connect(m_manager, &AppManager::onlineChanged, this, [this] { setOnline(m_manager->online()); });
     connect(m_manager, &AppManager::downloadStateChanged, this, [this] {
         setDownloadSource(m_manager->downloadSource());
@@ -51,6 +55,8 @@ AppManagerBackend::AppManagerBackend(QObject* parent)
             [this](const QString& name, int outcome, const QString& error) {
                 emit finished(name, outcome, error);
             });
+    connect(m_manager, &AppManager::loadFailed, this,
+            [this](const QString& error) { emit loadFailed(error); });
     connect(m_manager, &AppManager::searchRequested, this,
             [this](const QString& query) { emit searchRequested(query); });
 
@@ -211,6 +217,8 @@ void AppManagerBackend::setOptional(QString name, bool selected)
 void AppManagerBackend::mirror()
 {
     setLoading(m_manager->loading());
+    setLoaded(m_manager->loaded());
+    setLoadError(m_manager->loadError());
     setOnline(m_manager->online());
     setDownloadSource(m_manager->downloadSource());
     setStorageState(m_manager->storageState());

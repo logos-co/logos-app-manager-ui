@@ -68,5 +68,12 @@ Rectangle {
             if (outcome === 2)
                 toast.show(qsTr("Something went wrong with %1").arg(name), error)
         }
+        // A reload that failed keeps the list it had; the first load's
+        // failure is the page's to say.
+        function onLoadFailed(error) {
+            if (root.backend.loaded)
+                toast.show(qsTr("Couldn't reload the apps"),
+                           qsTr("Couldn't read %1. The list is the one from before.").arg(error))
+        }
     }
 }

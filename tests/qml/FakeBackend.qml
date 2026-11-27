@@ -8,8 +8,11 @@ QtObject {
 
     signal finished(string name, int outcome, string error)
     signal searchRequested(string query)
+    signal loadFailed(string error)
 
     property bool loading: false
+    property bool loaded: true
+    property string loadError: ""
     property bool online: true
     property string downloadSource: "any"
     property string storageState: "running"
