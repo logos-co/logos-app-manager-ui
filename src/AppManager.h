@@ -167,6 +167,7 @@ signals:
     void detailsChanged();
     // `outcome`: logos::installer::Installer::Outcome as an int.
     void finished(const QString& name, int outcome, const QString& error);
+    void changeEnded(const QString& change);
     // The page is asked to search for `query`, in its own field.
     void searchRequested(const QString& query);
 

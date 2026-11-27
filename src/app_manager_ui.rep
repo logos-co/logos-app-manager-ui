@@ -69,6 +69,8 @@ class AppManagerUi
 
     // outcome: 0 done, 1 cancelled, 2 failed.
     SIGNAL(finished(QString name, int outcome, QString error))
+    // The change Basecamp approved as `change` is over (Installer::changeEnded).
+    SIGNAL(changeEnded(QString change))
     // Each read of the catalog that failed, `error` as loadError has it.
     SIGNAL(loadFailed(QString error))
     // An apps.search delivered through intents_module: the page searches for

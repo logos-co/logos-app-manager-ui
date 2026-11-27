@@ -142,6 +142,7 @@ void AppManager::setModules(PackageModules* packages, InstallModules* installs, 
                 if (!m_detailsName.isEmpty()) readTrustedKeys();
                 emit finished(name, static_cast<int>(outcome), error);
             });
+    connect(m_installer, &Installer::changeEnded, this, &AppManager::changeEnded);
 }
 
 void AppManager::setIconFetch(IconFetcher::Fetch fetch)
