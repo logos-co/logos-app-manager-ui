@@ -248,7 +248,9 @@ TestCase {
 
     function test_its_close_button_closes_it() {
         const page = makePage(Rows.app("wallet_ui"))
-        mouseClick(find(page, "appManager.details.close"))
+        const close = find(page, "appManager.details.close")
+        compare(close.Accessible.name, "Close")
+        mouseClick(close)
         compare(backSpy.count, 1)
     }
 
@@ -427,6 +429,24 @@ TestCase {
         compare(action.enabled, false)
     }
 
+    // "1 package", "2 packages": not "package(s)".
+    function test_what_is_installing_is_counted_in_words() {
+        const installing = { planInstallStage: Types.InstallStage.Downloading }
+        let page = makePage(wallet([self({ installing: true }), pkg("signer")], installing))
+        compare(find(page, "appManager.details.footer").text, "Downloading… 1 package…")
+        page = makePage(wallet([self({ installing: true }), pkg("signer", { installing: true })], installing))
+        compare(find(page, "appManager.details.footer").text, "Downloading… 2 packages…")
+
+        const busy = { installedVersion: "1.0.0", rowAction: Types.RowAction.NoOp, installing: true }
+        page = makePage(Rows.installed("wallet_ui", {
+            displayName: "Wallet", installedVersion: "2.0.0", availableVersions: versions(), selectedVersionIndex: 0,
+            packages: [self({ installedVersion: "2.0.0", rowAction: Types.RowAction.NoOp }),
+                       pkg("signer", busy), pkg("keys", busy)] }))
+        compare(find(page, "appManager.details.footer").text,
+                "2 of Wallet's required packages are currently being installed. "
+                + "Wait for the active install to finish before opening Wallet.")
+    }
+
     // The footer says to wait; so does every button.
     function test_while_another_install_brings_a_package_it_needs_nothing_starts() {
         const busy = pkg("signer", { installedVersion: "1.0.0", rowAction: Types.RowAction.NoOp, installing: true,
@@ -438,7 +458,7 @@ TestCase {
         verify(open.visible)
         compare(open.enabled, false)
         compare(find(page, "appManager.details.footer").text,
-                "1 of Wallet's required package(s) are currently being installed. "
+                "1 of Wallet's required packages is currently being installed. "
                 + "Wait for the active install to finish before opening Wallet.")
         page = makePage(wallet([self(), busy]))
         compare(find(page, "appManager.details.action").enabled, false)

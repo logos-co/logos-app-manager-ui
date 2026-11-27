@@ -5,6 +5,7 @@ import Logos.Controls
 import Logos.Icons
 import Logos.Theme
 
+import "AppActions.js" as AppActions
 import "Installer/Downloads.js" as Downloads
 import "Installer/Stages.js" as Stages
 import "Installer/Types.js" as Types
@@ -41,11 +42,7 @@ ItemDelegate {
             root.appData && root.appData.planInstallStage !== undefined
                 ? root.appData.planInstallStage
                 : Types.InstallStage.None
-        readonly property bool isInstalling:
-            d.installStage === Types.InstallStage.Downloading
-            || d.installStage === Types.InstallStage.Downloaded
-            || d.installStage === Types.InstallStage.Queued
-            || d.installStage === Types.InstallStage.Installing
+        readonly property bool isInstalling: AppActions.busy(d.installStage)
         // What the badge offers for the app's status.
         readonly property int statusAction:
             d.installStatus === Types.InstallStatus.UpgradeAvailable   ? Types.RowAction.Upgrade
@@ -110,13 +107,8 @@ ItemDelegate {
 
         readonly property int tileSize: 40
 
-        // Mirrors AppContextMenu.canUninstall so the trash icon and the menu
-        // agree on when Uninstall is offered. Kept here rather than in the
-        // menu snapshot because the icon is shown before any right-click.
-        readonly property bool isEmbedded:  d.installType === "embedded"
-        readonly property bool isProtected: d.nameText === "main_ui"
-        readonly property bool canUninstall:
-            d.isInstalled && !d.isEmbedded && !d.isProtected && !d.isInstalling
+        // The menu's Uninstall, shown before any right-click.
+        readonly property bool canUninstall: AppActions.canUninstall(root.appData) && !d.isInstalling
 
         // See AppGridDelegate — snapshot rather than hand `model` to the menu.
         function snapshot() {
@@ -128,6 +120,7 @@ ItemDelegate {
                 installStage:  d.installStage,
                 installStatus: d.installStatus,
                 installType:   d.installType,
+                rowAction:     root.appData ? root.appData.rowAction : undefined,
             };
         }
     }
@@ -306,6 +299,7 @@ ItemDelegate {
             iconSource: LogosIcons.trash
             background: Item {}
             objectName: "appListDelegate.uninstall"
+            Accessible.name: qsTr("Uninstall %1").arg(d.displayName)
             onClicked: root.uninstallRequested(d.nameText, d.repositoryUrl)
             LogosToolTip {
                 text: qsTr("Uninstall")

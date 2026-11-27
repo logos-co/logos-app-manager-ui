@@ -3,6 +3,7 @@ import QtQuick.Controls
 import Logos.Controls
 import Logos.Theme
 
+import "AppActions.js" as AppActions
 import "Installer/Types.js" as Types
 
 LogosMenu {
@@ -11,7 +12,7 @@ LogosMenu {
     objectName: "appContextMenu"
 
     // Plain object snapshot of the row: name, displayName, repositoryUrl,
-    // isInstalled, installStage, installStatus, installType. Set by openFor(),
+    // isInstalled, installStage, installStatus, installType, rowAction. Set by openFor(),
     // or by the delegate as its contextFor opens it — never bound to a
     // delegate's `model`, which would dangle once the row scrolls out from
     // under an open menu.
@@ -41,19 +42,10 @@ LogosMenu {
             (root.appData && root.appData.installStage !== undefined)
                 ? root.appData.installStage
                 : Types.InstallStage.None
-        // Install/upgrade in flight — the module's pending slot is global,
-        // so a racing uninstall would just be rejected. Disable rather than
-        // hide so the item doesn't jump around mid-install.
-        readonly property bool rowBusy:
-            d.rowStage === Types.InstallStage.Queued
-            || d.rowStage === Types.InstallStage.Downloading
-            || d.rowStage === Types.InstallStage.Installing
-        readonly property bool rowEmbedded:
-            !!root.appData && root.appData.installType === "embedded"
-        readonly property bool rowProtected:
-            d.rowName === "main_ui"
-        readonly property bool canUninstall:
-            d.rowInstalled && !d.rowEmbedded && !d.rowProtected
+        // An uninstall waits out an install of it. Disabled rather than
+        // hidden, so the item doesn't jump around mid-install.
+        readonly property bool rowBusy: AppActions.busy(d.rowStage)
+        readonly property bool canUninstall: AppActions.canUninstall(root.appData)
     }
 
     LogosMenuItem {
@@ -74,7 +66,7 @@ LogosMenu {
     LogosMenuItem {
         objectName: "appContextMenu.install"
         text: qsTr("Install…")
-        visible: !d.rowInstalled
+        visible: AppActions.offersInstall(root.appData)
         height: visible ? implicitHeight : 0
         onTriggered: root.installRequested(d.rowName, d.rowRepositoryUrl)
     }

@@ -18,9 +18,13 @@ QtObject {
     property string storageState: "running"
     property string hostVariant: "linux-x86_64"
     property int repositoryCount: 1
+    property int enabledRepositoryCount: 1
+    property var unreachableRepositories: []
     property var categories: ["All", "Chat", "Wallet"]
     property int visibleCount: 0
-    property int localCount: 0
+    // A catalog with apps, whatever the filters list.
+    property int appCount: 1
+    property int availableCount: 1
     property string searchText: ""
     property string category: "All"
     property int installState: 0

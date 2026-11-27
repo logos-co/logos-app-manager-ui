@@ -7,6 +7,7 @@ import Logos.Icons
 import Logos.Layouts
 import Logos.Theme
 
+import "AppActions.js" as AppActions
 import "Installer/Downloads.js" as Downloads
 import "Installer/Stages.js" as Stages
 import "Installer/Types.js" as Types
@@ -55,10 +56,7 @@ Rectangle {
 
         readonly property int stage: app.planInstallStage !== undefined
                                      ? app.planInstallStage : Types.InstallStage.None
-        readonly property bool installing: stage === Types.InstallStage.Downloading
-                                            || stage === Types.InstallStage.Downloaded
-                                            || stage === Types.InstallStage.Queued
-                                            || stage === Types.InstallStage.Installing
+        readonly property bool installing: AppActions.busy(stage)
         readonly property bool failed: stage === Types.InstallStage.Failed
         readonly property int action: app.rowAction !== undefined ? app.rowAction : Types.RowAction.NoOp
         readonly property bool available: action !== Types.RowAction.NotAvailable
@@ -68,9 +66,7 @@ Rectangle {
         readonly property var version: versions[versionIndex] || ({})
         readonly property string versionText: version.version || app.version || ""
 
-        // On disk and put there by the person; the shell itself never.
-        readonly property bool canUninstall: installedVersion.length > 0 && !installing
-                                             && app.installType === "user" && name !== "main_ui"
+        readonly property bool canUninstall: AppActions.canUninstall(app) && !installing
 
         // ─── What installing it brings: the app itself first ───
         readonly property var packages: app.packages || []
@@ -103,11 +99,15 @@ Rectangle {
         readonly property string footer: {
             if (installing)
                 return installingCount > 0
-                    ? Stages.fill(qsTr("%1 %2 package(s)…"), Stages.stageWord(stage), installingCount)
+                    ? Stages.fill(installingCount === 1 ? qsTr("%1 %2 package…") : qsTr("%1 %2 packages…"),
+                                  Stages.stageWord(stage), installingCount)
                     : Stages.stageWord(stage)
             if (installingCount > 0 && changing.length === 0)
-                return Stages.fill(qsTr("%1 of %2's required package(s) are currently being installed. "
-                                        + "Wait for the active install to finish before opening %2."),
+                return Stages.fill(installingCount === 1
+                                       ? qsTr("%1 of %2's required packages is currently being installed. "
+                                              + "Wait for the active install to finish before opening %2.")
+                                       : qsTr("%1 of %2's required packages are currently being installed. "
+                                              + "Wait for the active install to finish before opening %2."),
                                    installingCount, displayName)
             if (changing.length === 0) return ""
             if (changingDeps.length === 0) {
@@ -182,6 +182,7 @@ Rectangle {
 
             LogosIconButton {
                 objectName: "appManager.details.close"
+                Accessible.name: qsTr("Close")
                 iconSource: LogosIcons.close
                 size: 28
                 iconSize: 14

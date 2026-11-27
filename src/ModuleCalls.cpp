@@ -19,9 +19,13 @@ ModuleCalls::ModuleCalls(LogosModules& modules)
 {
 }
 
-void ModuleCalls::startDownloader(std::function<void()> done)
+void ModuleCalls::startDownloader(std::function<void(bool)> done)
 {
-    m_modules.package_downloader.startAsync([done](const QVariantMap&) { done(); }, Timeout(kReadMs));
+    m_modules.package_downloader.startAsyncResult(
+        [done](logos::AsyncResult<QVariantMap> r) {
+            done(r.ok() && r.value.value(QStringLiteral("success")).toBool());
+        },
+        Timeout(kReadMs));
 }
 
 void ModuleCalls::listRepositories(std::function<void(const QVariantList&, bool)> done)
@@ -72,6 +76,14 @@ void ModuleCalls::listTrustedKeys(std::function<void(const QVariantList&, bool)>
     // The keyring package_manager holds, which Basecamp points at its own.
     m_modules.package_manager.listTrustedKeysAsyncResult(
         [done](logos::AsyncResult<QVariantList> r) { done(r.value, r.ok()); }, Timeout(kReadMs));
+}
+
+void ModuleCalls::resolveFlatDependencies(const QString& name,
+                                          std::function<void(const QVariantList&, bool)> done)
+{
+    m_modules.package_manager.resolveFlatDependenciesAsyncResult(
+        name, true, [done](logos::AsyncResult<QVariantList> r) { done(r.value, r.ok()); },
+        Timeout(kReadMs));
 }
 
 void ModuleCalls::downloadPinned(const QString& repositoryUrl, const QString& name,

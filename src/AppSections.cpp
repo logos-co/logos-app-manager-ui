@@ -52,7 +52,11 @@ void AppSections::setSourceModel(QAbstractItemModel* source)
                       << connect(source, &QAbstractItemModel::rowsRemoved, this, resync)
                       << connect(source, &QAbstractItemModel::rowsMoved, this, resync)
                       << connect(source, &QAbstractItemModel::layoutChanged, this, resync)
-                      << connect(source, &QAbstractItemModel::modelReset, this, resync)
+                      << connect(source, &QAbstractItemModel::modelReset, this, [this] {
+                             // A row that stays may hold other data after a reset.
+                             sync();
+                             if (!m_lines.isEmpty()) emit dataChanged(index(0), index(m_lines.size() - 1));
+                         })
                       << connect(source, &QAbstractItemModel::dataChanged, this,
                                  &AppSections::forwardDataChanged);
     }

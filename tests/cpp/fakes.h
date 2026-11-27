@@ -34,11 +34,23 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     QHash<QString, QVariantMap> installed;
     // The keyring, as listTrustedKeys reports it: [{did, displayName}].
     QVariantList trustedKeys;
-    // With `keyringWaits`, listTrustedKeys answers when its answer runs.
+    // With `keyringWaits`, listTrustedKeys answers when its answer runs, with
+    // the keyring as it was when asked.
     bool keyringWaits = false;
     QList<std::function<void()>> keyringAnswers;
+    // What each installed package needs, and what only optionally: what
+    // resolveFlatDependencies answers from, with what is installed. With
+    // `dependenciesWait`, it answers when its answer runs.
+    QHash<QString, QStringList> needs;
+    QHash<QString, QStringList> mayUse;
+    bool dependenciesWait = false;
+    QList<std::function<void()>> dependencyAnswers;
+    QStringList dependencyReads;
     // What the downloader serves, keyed "name@version": "name|version|rootHash|signer".
+    // With `downloadsWait`, downloadPinned answers when its answer runs.
     QHash<QString, QString> served;
+    bool downloadsWait = false;
+    QList<std::function<void()>> downloadAnswers;
 
     void addInstalled(const QString& name, const QString& version, const QString& rootHash,
                       const QString& type = QStringLiteral("user"))
@@ -65,10 +77,10 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     }
 
     // PackageModules
-    void startDownloader(std::function<void()> done) override
+    void startDownloader(std::function<void(bool)> done) override
     {
         calls << "start";
-        done();
+        done(true);
     }
     void listRepositories(std::function<void(const QVariantList&, bool)> done) override
     {
@@ -101,11 +113,31 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     }
     void listTrustedKeys(std::function<void(const QVariantList&, bool)> done) override
     {
-        const auto answer = [this, done] {
-            const bool read = !failing.contains("listTrustedKeys");
-            done(read ? trustedKeys : QVariantList{}, read);
-        };
+        const bool read = !failing.contains("listTrustedKeys");
+        const auto answer = [done, read, keys = trustedKeys] { done(read ? keys : QVariantList{}, read); };
         if (keyringWaits) keyringAnswers.append(answer);
+        else answer();
+    }
+    // package_manager's resolveFlatDependencies(name, true), as AppManager
+    // reads it (setReadDependencies()).
+    void resolveFlatDependencies(const QString& name, std::function<void(const QVariantList&, bool)> done)
+    {
+        dependencyReads << name;
+        const auto answer = [this, name, done] {
+            if (failing.contains("resolveFlatDependencies")) {
+                done({}, false);
+                return;
+            }
+            QVariantList rows;
+            for (const QString& dep : needs.value(name) + mayUse.value(name)) {
+                QVariantMap row{{"name", dep},
+                                {"status", installed.contains(dep) ? "installed" : "not_installed"}};
+                if (mayUse.value(name).contains(dep)) row.insert("optional", true);
+                rows.append(row);
+            }
+            done(rows, true);
+        };
+        if (dependenciesWait) dependencyAnswers.append(answer);
         else answer();
     }
 
@@ -114,19 +146,23 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
                         const QString& rootHash, std::function<void(const QVariantMap&)> done) override
     {
         calls << "download " + name;
-        const QString content = served.value(name + "@" + version);
-        if (content.isEmpty()) {
-            done({{"name", name}, {"error", "no such release"}});
-            return;
-        }
-        const QString path = QDir(files.path()).filePath(name + "-" + version + ".lgx");
-        QFile f(path);
-        f.open(QIODevice::WriteOnly);
-        f.write(content.toUtf8());
-        f.close();
-        done({{"name", name}, {"version", version}, {"rootHash", rootHash},
-              {"repositoryUrl", repositoryUrl}, {"source", "https://repo.example/" + name + ".lgx"},
-              {"path", path}});
+        const auto answer = [this, repositoryUrl, name, version, rootHash, done] {
+            const QString content = served.value(name + "@" + version);
+            if (content.isEmpty()) {
+                done({{"name", name}, {"error", "no such release"}});
+                return;
+            }
+            const QString path = QDir(files.path()).filePath(name + "-" + version + ".lgx");
+            QFile f(path);
+            f.open(QIODevice::WriteOnly);
+            f.write(content.toUtf8());
+            f.close();
+            done({{"name", name}, {"version", version}, {"rootHash", rootHash},
+                  {"repositoryUrl", repositoryUrl}, {"source", "https://repo.example/" + name + ".lgx"},
+                  {"path", path}});
+        };
+        if (downloadsWait) downloadAnswers.append(answer);
+        else answer();
     }
     void verifyPackage(const QString& path, std::function<void(const QVariantMap&)> done) override
     {
