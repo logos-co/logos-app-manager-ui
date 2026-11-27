@@ -550,6 +550,33 @@ TestCase {
         compare(notice.shown, false)
     }
 
+    // logos-basecamp#328: published packages are portable, so a dev build
+    // lists them all as unavailable. It says it's the build, not the package.
+    function test_a_dev_build_says_so() {
+        backend.hostVariant = "linux-x86_64-dev"
+        const view = makeView(twoSections())
+        const notice = find(view, "appManager.devBuildNotice")
+        verify(notice.visible)
+        verify(notice.message.indexOf("#portable-builds") >= 0, notice.message)
+        mouseClick(notice.closeButtonItem)
+        verify(!notice.visible, "dismissed")
+    }
+
+    function test_a_portable_build_has_no_dev_build_notice() {
+        const view = makeView(twoSections())
+        verify(!find(view, "appManager.devBuildNotice").visible)
+    }
+
+    function test_a_dev_build_with_nothing_shown_names_the_build() {
+        backend.hostVariant = "linux-x86_64-dev"
+        backend.availableCount = 0
+        const view = makeView([])
+        const none = find(view, "appManager.noneForPlatformView")
+        verify(none.visible)
+        compare(none.title, "Nothing installable on a dev build")
+        verify(none.message.indexOf("x86_64") < 0, none.message)
+    }
+
     function test_loading_covers_the_page() {
         const view = makeView(twoSections())
         const overlay = find(view, "appManager.loadingOverlay")

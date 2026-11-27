@@ -123,6 +123,20 @@ TestCase {
         noneOverTheSides(view)
     }
 
+    // A dev build's notice, link and all, wraps (logos-basecamp#328).
+    function test_a_dev_build_fits_data() {
+        return [360, 390, 700, 1280].map(w => ({ tag: String(w), width: w }))
+    }
+    function test_a_dev_build_fits(data) {
+        backend.hostVariant = "linux-x86_64-dev"
+        const view = makeView(data.width)
+        const notice = find(view, "appManager.devBuildNotice")
+        verify(notice.visible)
+        verify(notice.messageItem.contentWidth <= notice.messageItem.width + 0.5,
+               "the link wraps: " + notice.messageItem.contentWidth + " > " + notice.messageItem.width)
+        noneOverTheSides(view)
+    }
+
     // Laid out with no width and tiles in it, the list went below 0 wide and
     // the view hung.
     function test_no_width_with_tiles_settles() {
