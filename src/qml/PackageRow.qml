@@ -108,6 +108,8 @@ Item {
                 objectName: "packageRow.name"
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
+                // Its own width, so the mark sits right after it.
+                Layout.maximumWidth: Math.ceil(implicitWidth)
                 text: d.r.displayName || d.r.name || ""
                 font.weight: Theme.typography.weightMedium
                 font.pixelSize: Theme.typography.primaryText
@@ -120,6 +122,14 @@ Item {
                     visible: nameHover.hovered && nameLabel.truncated
                 }
             }
+
+            TrustMark {
+                objectName: "packageRow.trust"
+                Layout.alignment: Qt.AlignVCenter
+                verdict: d.r.trust
+            }
+
+            Item { Layout.fillWidth: true }
 
             LogosBadge {
                 id: badge

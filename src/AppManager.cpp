@@ -7,9 +7,12 @@
 #include <logos/installer/OnlineWatch.h>
 #include <logos/installer/PackageFilter.h>
 #include <logos/installer/PackageModel.h>
+#include <logos/installer/PackageModules.h>
 #include <logos/installer/PackageRows.h>
+#include <logos/installer/PackageTrust.h>
 #include <logos/installer/RowState.h>
 
+#include <QPointer>
 #include <QTimer>
 
 #include <utility>
@@ -86,6 +89,7 @@ AppManager::~AppManager() = default;
 void AppManager::setModules(PackageModules* packages, InstallModules* installs, Consent* consent)
 {
     if (m_catalog) return;
+    m_packages = packages;
     m_catalog = new CatalogClient(packages, m_model, this);
     if (m_debounceMs >= 0) m_catalog->setDebounceInterval(m_debounceMs);
     m_installer = new Installer(installs, consent, m_progress, this);
@@ -148,6 +152,7 @@ void AppManager::refresh()
 void AppManager::onPackagesChanged()
 {
     if (m_catalog) m_catalog->onPackagesChanged();
+    if (!m_detailsName.isEmpty()) readTrustedKeys();
 }
 
 void AppManager::onCatalogChanged()
@@ -425,6 +430,7 @@ void AppManager::showDetails(const QString& name, const QString& repositoryUrl)
     m_detailsName = name;
     m_detailsRepositoryUrl = repositoryUrl;
     refreshDetails();
+    readTrustedKeys();
 }
 
 void AppManager::closeDetails()
@@ -557,13 +563,42 @@ bool AppManager::fromEnabledSource(const QVariantMap& row) const
     return repositoryUrl.isEmpty() || !m_disabledRepositories.contains(repositoryUrl);
 }
 
+void AppManager::readTrustedKeys()
+{
+    if (!m_packages) return;
+    QPointer<AppManager> self(this);
+    m_packages->listTrustedKeys([self](const QVariantList& keys, bool read) {
+        if (!self || (self->m_keysAnswered && keys == self->m_trustedKeys && read == self->m_keysRead))
+            return;
+        self->m_trustedKeys = keys;
+        self->m_keysRead = read;
+        self->m_keysAnswered = true;
+        self->refreshDetails();
+    });
+}
+
 void AppManager::refreshDetails()
 {
     QVariantMap details;
     const int row = rowOf(m_detailsName, m_detailsRepositoryUrl);
     if (row >= 0) {
         details = m_model->rowAt(row);
-        details.insert(QStringLiteral("packages"), m_model->packagesBroughtBy(row, m_optional, m_versions));
+        QVariantList packages = m_model->packagesBroughtBy(row, m_optional, m_versions);
+        // Nothing said of who signed what until the keyring answers.
+        if (m_keysAnswered) {
+            const QVariantMap trust =
+                trustOfBrought(*m_model, packages, m_trustedKeys, m_keysRead, m_detailsName);
+            for (QVariant& v : packages) {
+                QVariantMap p = v.toMap();
+                p.insert(QStringLiteral("trust"), trust.value(str(p, "name")));
+                v = p;
+            }
+            // Who signed the app: what it is, not a row a plan leaves as it is.
+            QVariantMap own = trust.value(m_detailsName).toMap();
+            own.remove(QStringLiteral("installed"));
+            details.insert(QStringLiteral("trust"), own);
+        }
+        details.insert(QStringLiteral("packages"), packages);
     } else if (!m_detailsName.isEmpty()) {
         // Gone from every list: closed for good, not reopened if it comes back.
         forgetPicks();

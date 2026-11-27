@@ -67,6 +67,13 @@ void ModuleCalls::getValidVariants(std::function<void(const QStringList&, bool)>
         [done](logos::AsyncResult<QStringList> r) { done(r.value, r.ok()); }, Timeout(kReadMs));
 }
 
+void ModuleCalls::listTrustedKeys(std::function<void(const QVariantList&, bool)> done)
+{
+    // The keyring package_manager holds, which Basecamp points at its own.
+    m_modules.package_manager.listTrustedKeysAsyncResult(
+        [done](logos::AsyncResult<QVariantList> r) { done(r.value, r.ok()); }, Timeout(kReadMs));
+}
+
 void ModuleCalls::downloadPinned(const QString& repositoryUrl, const QString& name,
                                  const QString& version, const QString& rootHash,
                                  std::function<void(const QVariantMap&)> done)

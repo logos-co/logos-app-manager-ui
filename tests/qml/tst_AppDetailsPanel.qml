@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 
+import Logos.Icons
 import Logos.Theme
 
 import "../../src/qml"
@@ -19,6 +20,7 @@ TestCase {
     when: windowShown
 
     Component { id: pageComp; AppDetailsPanel {} }
+    Component { id: markComp; TrustMark {} }
     SignalSpy { id: openSpy; signalName: "openRequested" }
     SignalSpy { id: installSpy; signalName: "installRequested" }
     SignalSpy { id: uninstallSpy; signalName: "uninstallRequested" }
@@ -530,5 +532,89 @@ TestCase {
         }))
         compare(find(page, "appManager.details.footer").visible, false)
         compare(find(page, "appManager.details.packagesCount").text, "2 / 2")
+    }
+
+    // ── Who signed it, as Basecamp's install dialog says it ──
+
+    // Under its name, centred: the dialog's mark and words.
+    function test_who_signed_the_app_is_said_under_its_name() {
+        let page = makePage(wallet([self()], { trust: { status: "trusted", publisher: "Logos" } }))
+        let line = find(page, "appManager.details.trust")
+        verify(line.visible)
+        const words = find(line, "trust.lineWords")
+        compare(words.text, "Signed by Logos")
+        const icon = find(line, "trust.markIcon")
+        compare(String(icon.source), String(LogosIcons.check))
+        const name = find(page, "appManager.details.name")
+        const left = icon.mapToItem(page, 0, 0).x
+        const right = words.mapToItem(page, 0, 0).x + words.contentWidth
+        fuzzyCompare((left + right) / 2, name.mapToItem(page, name.width / 2, 0).x, 1)
+        verify(line.mapToItem(page, 0, 0).y >= name.mapToItem(page, 0, name.height).y)
+
+        page = makePage(wallet([self()], { trust: { status: "untrusted", publisher: "Acme" } }))
+        line = find(page, "appManager.details.trust")
+        compare(find(line, "trust.lineWords").text, "Signed by a publisher you don't trust yet")
+        compare(String(find(line, "trust.markIcon").source), String(LogosIcons.warning))
+
+        // Until it is judged, nothing is said.
+        page = makePage(wallet([self()]))
+        compare(find(page, "appManager.details.trust").visible, false)
+    }
+
+    // On a phone a publisher's name as long as one is shown wraps, inside
+    // the panel.
+    function test_who_signed_it_wraps_inside_a_phone_wide_panel() {
+        const page = makePage(wallet([self()], {
+            trust: { status: "trusted", publisher: "Northern Lights Cryptography Research Cooperative of Helsinki Oy" } }))
+        page.width = 360
+        waitForRendering(page)
+        const line = find(page, "appManager.details.trust")
+        const words = find(line, "trust.lineWords")
+        verify(words.lineCount > 1, "lines " + words.lineCount)
+        verify(words.contentWidth <= words.width + 0.5, words.contentWidth + " in " + words.width)
+        const left = line.mapToItem(page, 0, 0).x
+        verify(left >= 0, "left " + left)
+        verify(left + line.width <= page.width, "right " + (left + line.width))
+    }
+
+    // Each package it brings, marked as the dialog marks it, right after
+    // its name.
+    function test_each_package_it_brings_is_marked_with_who_signed_it() {
+        const page = makePage(wallet([
+            self({ trust: { status: "trusted", publisher: "Logos" } }),
+            pkg("signer", { displayName: "Signer", trust: { status: "untrusted", publisher: "Acme" } }),
+            pkg("keys", { installedVersion: "1.0.0", rowAction: Types.RowAction.NoOp,
+                          trust: { status: "unsigned", installed: true } }),
+            pkg("crypto"),
+        ]))
+        const row = (name) => find(page, "appManager.details.package." + name)
+        const mark = (name) => find(row(name), "packageRow.trust")
+        compare(mark("wallet_ui").description, "Signed by Logos")
+        compare(mark("signer").description, "Signed by a publisher you don't trust yet")
+        compare(mark("keys").description, "Already installed, not signed")
+        verify(mark("signer").visible)
+        compare(mark("crypto").visible, false)
+        // Where its name's text ends, not its box.
+        const name = find(row("signer"), "packageRow.name")
+        fuzzyCompare(mark("signer").mapToItem(page, 0, 0).x,
+                     name.mapToItem(page, name.contentWidth, 0).x + Theme.spacing.small, 1)
+    }
+
+    // Its words on hover, or a tap where nothing hovers.
+    function test_a_mark_says_its_words_on_hover_or_a_tap() {
+        const mark = createTemporaryObject(markComp, testCase, { x: 40, y: 40, verdict: { status: "unsigned" } })
+        waitForRendering(mark)
+        const tip = find(mark, "trust.markTip")
+        compare(tip.text, "Not signed: nobody vouches for it")
+        compare(tip.visible, false)
+        mouseMove(mark, mark.width / 2, mark.height / 2)
+        tryCompare(tip, "visible", true)
+        mouseMove(testCase, 400, 400)
+        tryCompare(tip, "visible", false)
+        mouseClick(mark, mark.width / 2, mark.height / 2)
+        mouseMove(testCase, 400, 400)
+        // Past a closing tip's fade: it stays.
+        wait(500)
+        verify(tip.visible)
     }
 }

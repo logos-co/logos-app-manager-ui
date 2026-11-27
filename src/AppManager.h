@@ -124,7 +124,9 @@ public:
     void closeDetails();
     // Every role of the open app's row, by name, and `packages`: what it
     // brings (PackageModel::packagesBroughtBy()), an optional one's `selected`
-    // included. Empty with none open.
+    // included, each with `trust`: who signed it, as Basecamp's install dialog
+    // judges it (trustOfBrought()), once the keyring has answered. The app's
+    // own is `trust` too, as what it is. Empty with none open.
     QVariantMap details() const { return m_details; }
     // The version of the open app (its row's), or of a package it brings, and
     // whether an optional package comes with it: they go to Basecamp with the
@@ -171,6 +173,10 @@ private:
     void takeDeliveries();
     void applyRepositories();
     void refreshDetails();
+    // Who the person trusts (PackageModules::listTrustedKeys()), read again
+    // for each details shown and after what is installed changes: trusting a
+    // publisher comes with an install.
+    void readTrustedKeys();
     // The open details' picks, for its install ({versions, optional}), and
     // putting them back as they were.
     QVariantMap choicesFor(const QString& name, const QString& repositoryUrl) const;
@@ -187,6 +193,10 @@ private:
     logos::installer::IconFetcher* m_icons;
     logos::installer::CatalogClient* m_catalog = nullptr;
     logos::installer::Installer* m_installer = nullptr;
+    logos::installer::PackageModules* m_packages = nullptr;
+    QVariantList m_trustedKeys;
+    bool m_keysRead = false;      // the last answer read it
+    bool m_keysAnswered = false;  // any answer came
     int m_debounceMs = -1;
     int m_clearDelayMs = -1;
 

@@ -13,16 +13,16 @@ import "Installer/Types.js" as Types
 import "Icons.js" as Icons
 
 // One app, beside the list as Package Manager shows a package: what it is,
-// its version, what installing it brings, each at the version picked on its
-// row, and what can be done with it: open it, install, upgrade, downgrade or
-// reinstall it at that version, or remove it. Basecamp approves each change;
-// this panel only asks.
+// who signed it, its version, what installing it brings, each at the version
+// picked on its row, and what can be done with it: open it, install, upgrade,
+// downgrade or reinstall it at that version, or remove it. Basecamp approves
+// each change; this panel only asks.
 Rectangle {
     id: root
     objectName: "appManager.details"
 
-    // The app's row, every role by name, and `packages`, what it brings: the
-    // backend's `details`.
+    // The app's row, every role by name, `packages`, what it brings, and
+    // `trust`, who signed it: the backend's `details`.
     property var app: ({})
     // Beside the list it has its own title and ✕; as the page (a phone) the
     // side panel's bar is the way back.
@@ -228,6 +228,16 @@ Rectangle {
                         font.pixelSize: Theme.typography.primaryText
                         font.weight: Theme.typography.weightMedium
                         color: Theme.palette.text
+                    }
+
+                    // Who signed it, as Basecamp's install dialog says it:
+                    // centred at its own width, wrapped where that's too wide.
+                    TrustLine {
+                        objectName: "appManager.details.trust"
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: Math.ceil(implicitWidth)
+                        verdict: d.app.trust
                     }
                 }
 

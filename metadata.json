@@ -44,7 +44,9 @@
   },
   "nix": {
     "packages": {
-      "build": [],
+      "build": [
+        "icu"
+      ],
       "runtime": [
         "qt6.qtdeclarative"
       ]

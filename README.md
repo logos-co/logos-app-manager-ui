@@ -7,11 +7,11 @@ It lists the apps (`ui_qml` packages) of every repository Basecamp knows, a
 section each, with the apps installed from a file last; filters them by
 category, install state and search. An installed app's tile opens it; any
 other shows its details beside the list, as Package Manager shows a package:
-what it is, the download, what can be done with it, and, as Basecamp's Add
-Application dialog had them, the packages installing it brings, the app
-first, each with its state and a picker for its version, then the optional
-packages any of them offers, ticked to come, each with what it brings under
-it.
+what it is and who signed it, the download, what can be done with it, and, as
+Basecamp's Add Application dialog had them, the packages installing it
+brings, the app first, each with its state, who signed it and a picker for
+its version, then the optional packages any of them offers, ticked to come,
+each with what it brings under it.
 
 ## How it installs
 
@@ -30,10 +30,17 @@ The view never installs anything, and never sees an approval.
 The view gets back only how it ended (`finished`), and the tiles show each
 download and install as it happens.
 
+Who signed what, in the details, is Basecamp's install dialog's judgement and
+words (the library's `Trust.h` and `Trust.js`), on the keyring package_manager
+holds: the release picked for what installs, the copy on disk for what stays.
+Until the keyring answers nothing is said, and a keyring that can't be read
+trusts nobody. It only informs: Basecamp's dialog judges again, with rules of
+its own, and decides.
+
 All of this is [basecamp-installer-common](https://github.com/logos-co/basecamp-installer-common)'s,
 the library App Manager shares with Package Manager and Basecamp: the package
-rows and their rules, the filters, the catalog client and the install
-pipeline, and the JavaScript for their words.
+rows and their rules, the filters, the catalog client, the install pipeline
+and who signed what, and the JavaScript for their words.
 
 ## Layout
 

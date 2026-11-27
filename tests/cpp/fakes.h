@@ -3,7 +3,7 @@
 // package_downloader, package_manager and Basecamp's consent, faked. The
 // fake's package files hold what they are ("name|version|rootHash|signer"),
 // so what inspect and verify read follows the file, as package_manager's do.
-// Everything answers at once.
+// Everything answers at once, the keyring unless told to wait.
 
 #include <logos/installer/Consent.h>
 #include <logos/installer/InstallModules.h>
@@ -32,6 +32,11 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
 
     // Installed packages by name, as getInstalledPackages reports them.
     QHash<QString, QVariantMap> installed;
+    // The keyring, as listTrustedKeys reports it: [{did, displayName}].
+    QVariantList trustedKeys;
+    // With `keyringWaits`, listTrustedKeys answers when its answer runs.
+    bool keyringWaits = false;
+    QList<std::function<void()>> keyringAnswers;
     // What the downloader serves, keyed "name@version": "name|version|rootHash|signer".
     QHash<QString, QString> served;
 
@@ -93,6 +98,15 @@ struct Modules : logos::installer::PackageModules, logos::installer::InstallModu
     {
         const bool read = !failing.contains("getValidVariants");
         done(read ? variants : QStringList{}, read);
+    }
+    void listTrustedKeys(std::function<void(const QVariantList&, bool)> done) override
+    {
+        const auto answer = [this, done] {
+            const bool read = !failing.contains("listTrustedKeys");
+            done(read ? trustedKeys : QVariantList{}, read);
+        };
+        if (keyringWaits) keyringAnswers.append(answer);
+        else answer();
     }
 
     // InstallModules

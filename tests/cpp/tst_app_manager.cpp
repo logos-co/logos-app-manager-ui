@@ -10,6 +10,7 @@
 
 #include <logos/installer/IconFetcher.h>
 #include <logos/installer/Installer.h>
+#include <logos/installer/Trust.h>
 #include <logos/installer/Types.h>
 
 #include <QFile>
@@ -728,6 +729,141 @@ TEST(an_installed_app_installs_the_version_picked_for_a_package_it_needs) {
     CHECK(a.manager.install("storage_ui", kDefault));
     CHECK_EQ(a.lastIntent(), QStringLiteral("basecamp.packages.confirm_install"));
     CHECK_EQ(a.lastParams().value("versions").toMap(), (QVariantMap{{"storage", "1.0.0"}}));
+}
+
+// ── Who signed it ────────────────────────────────────────────────────────
+
+namespace {
+
+// A made-up Ed25519 key, spelled the way liblgx spells it.
+const QString kAcmeDid = QStringLiteral(
+    "did:jwk:eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6IkFRSURCQVVHQndnSkNnc01EUTRQRUJFU0V4"
+    "UVZGaGNZR1JvYkhCMGVIeUEifQ");
+
+const QVariantMap kLogosKey{{"did", logos::trust::logosDid()}, {"displayName", "Logos"}};
+
+// `row` with its version `index` signed by `did`, as `signer` names itself.
+QVariantMap signedAt(QVariantMap row, int index, const QString& did, const QString& signer)
+{
+    QVariantList versions = row["versions"].toList();
+    QVariantMap v = versions[index].toMap();
+    v["signature"] = QVariantMap{{"did", did}, {"signer", QVariantMap{{"name", signer}}}};
+    versions[index] = v;
+    row["versions"] = versions;
+    return row;
+}
+
+// The wallet, by Logos, needing the signer, its newest by Acme and the one
+// before by Logos, and keys, on disk and signed by nobody.
+void addWallet(App& a)
+{
+    const QVariantMap signer = withOlderVersion(
+        catalogRow(kDefault, "signer", "2.0.0", "S2", {}, kHere, "core"), "1.0.0", "S1");
+    a.modules.catalog = {
+        signedAt(app(kDefault, "wallet_ui", "1.0.0", "W", {dep("signer"), dep("keys")}), 0,
+                 logos::trust::logosDid(), "Logos"),
+        signedAt(signedAt(signer, 0, kAcmeDid, "Acme"), 1, logos::trust::logosDid(), "Logos"),
+        catalogRow(kDefault, "keys", "1.0.0", "K", {}, kHere, "core")};
+    a.modules.addInstalled("keys", "1.0.0", "K");
+}
+
+// The open details' `trust` of what the app brings.
+QVariantMap trustOf(const App& a, const QString& name)
+{
+    for (const QVariant& v : a.manager.details().value("packages").toList())
+        if (v.toMap().value("name").toString() == name) return v.toMap().value("trust").toMap();
+    return {};
+}
+
+QString statusOf(const QVariantMap& verdict)
+{
+    return verdict.value("status").toString();
+}
+
+}  // namespace
+
+// As Basecamp's install dialog judges them: what installs by the release
+// picked, what stays on disk by its copy.
+TEST(details_say_who_signed_the_app_and_each_package_it_brings) {
+    App a;
+    a.modules.trustedKeys = {kLogosKey};
+    addWallet(a);
+    a.manager.load();
+    a.manager.showDetails("wallet_ui", kDefault);
+    const QVariantMap own = a.manager.details().value("trust").toMap();
+    CHECK_EQ(statusOf(own), QStringLiteral("trusted"));
+    CHECK_EQ(own.value("publisher").toString(), QStringLiteral("Logos"));
+    CHECK_EQ(statusOf(trustOf(a, "wallet_ui")), QStringLiteral("trusted"));
+    CHECK_EQ(statusOf(trustOf(a, "signer")), QStringLiteral("untrusted"));
+    CHECK_EQ(trustOf(a, "signer").value("publisher").toString(), QStringLiteral("Acme"));
+    CHECK_EQ(statusOf(trustOf(a, "keys")), QStringLiteral("unsigned"));
+    CHECK(trustOf(a, "keys").value("installed").toBool());
+
+    a.manager.selectVersion("signer", kDefault, "1.0.0");
+    CHECK_EQ(statusOf(trustOf(a, "signer")), QStringLiteral("trusted"));
+    CHECK_EQ(trustOf(a, "signer").value("publisher").toString(), QStringLiteral("Logos"));
+}
+
+// An installed app's details say who signed it, not that it is there: its
+// row says that.
+TEST(an_installed_apps_details_say_who_signed_its_copy) {
+    App a;
+    a.modules.trustedKeys = {kLogosKey};
+    a.modules.catalog = {signedAt(app(kDefault, "wallet_ui", "1.0.0", "W"), 0, logos::trust::logosDid(), "Logos")};
+    a.modules.addInstalled("wallet_ui", "1.0.0", "W");
+    a.modules.installed["wallet_ui"].insert("signerDid", logos::trust::logosDid());
+    a.manager.load();
+    a.manager.showDetails("wallet_ui", kDefault);
+    const QVariantMap own = a.manager.details().value("trust").toMap();
+    CHECK_EQ(statusOf(own), QStringLiteral("trusted"));
+    CHECK(!own.contains("installed"));
+    CHECK(trustOf(a, "wallet_ui").value("installed").toBool());
+}
+
+// A keyring that can't be read trusts nobody, as in Basecamp's dialog.
+TEST(without_the_keyring_the_details_trust_no_signer) {
+    App a;
+    a.modules.trustedKeys = {kLogosKey};
+    a.modules.failing << "listTrustedKeys";
+    addWallet(a);
+    a.manager.load();
+    a.manager.showDetails("wallet_ui", kDefault);
+    CHECK_EQ(statusOf(a.manager.details().value("trust").toMap()), QStringLiteral("unknown"));
+    CHECK_EQ(statusOf(trustOf(a, "signer")), QStringLiteral("unknown"));
+    CHECK_EQ(statusOf(trustOf(a, "keys")), QStringLiteral("unsigned"));
+}
+
+// Until the keyring answers, nothing is said of who signed what: not
+// "couldn't check", which only a keyring that can't be read means.
+TEST(the_details_say_who_signed_what_once_the_keyring_answers) {
+    App a;
+    a.modules.trustedKeys = {kLogosKey};
+    a.modules.keyringWaits = true;
+    addWallet(a);
+    a.manager.load();
+    a.manager.showDetails("wallet_ui", kDefault);
+    CHECK(!a.manager.details().contains("trust"));
+    for (const QVariant& v : a.manager.details().value("packages").toList())
+        CHECK(!v.toMap().contains("trust"));
+    CHECK_EQ(a.modules.keyringAnswers.size(), 1);
+    a.modules.keyringAnswers.takeFirst()();
+    CHECK_EQ(statusOf(a.manager.details().value("trust").toMap()), QStringLiteral("trusted"));
+}
+
+// Trusting a publisher comes with an install: once what is installed
+// changes, the details read the keyring again.
+TEST(the_details_read_the_keyring_again_when_what_is_installed_changes) {
+    App a;
+    a.modules.trustedKeys = {kLogosKey};
+    addWallet(a);
+    a.manager.load();
+    a.manager.showDetails("wallet_ui", kDefault);
+    CHECK_EQ(statusOf(trustOf(a, "signer")), QStringLiteral("untrusted"));
+    a.modules.trustedKeys.append(QVariantMap{{"did", kAcmeDid}, {"displayName", "Acme"}});
+    a.manager.onPackagesChanged();
+    SPIN(20);
+    CHECK_EQ(statusOf(trustOf(a, "signer")), QStringLiteral("trusted"));
+    CHECK_EQ(trustOf(a, "signer").value("publisher").toString(), QStringLiteral("Acme"));
 }
 
 // ── Reload and events ────────────────────────────────────────────────────

@@ -72,7 +72,8 @@
             src = ./.;
             cmakeDir = "../tests";
             nativeBuildInputs = [ pkgs.cmake pkgs.ninja ];
-            buildInputs = [ pkgs.qt6.qtbase ];
+            # ICU: the library's trust sources.
+            buildInputs = [ pkgs.qt6.qtbase pkgs.icu ];
             dontWrapQtApps = true;
             cmakeFlags = [
               "-DBASECAMP_INSTALLER_COMMON_DIR=${basecamp-installer-common}"
