@@ -106,7 +106,7 @@ public:
     bool uninstall(const QString& name, const QString& repositoryUrl);
 
     // An intent this app provides, delivered through intents_module:
-    // packages.install {name, repositoryUrl}, answered through `respond` once
+    // apps.install {name, repositoryUrl}, answered through `respond` once
     // taken on (an app just started waits for its catalog): its details, from
     // `repositoryUrl` when it has it as an app (the one it was picked from),
     // else the first repository that does, and for Basecamp's own request

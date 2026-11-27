@@ -36,3 +36,6 @@ foreach(t app_sections app_manager)
     target_compile_options(tst_${t} PRIVATE -Wall -Wextra -Werror)
     add_test(NAME ${t} COMMAND tst_${t})
 endforeach()
+
+# tst_app_manager reads the module's own metadata.json.
+target_compile_definitions(tst_app_manager PRIVATE APP_SOURCE_DIR="${APP_SRC}")

@@ -21,7 +21,7 @@ using namespace logos::installer;
 namespace {
 
 const QString kAll = QStringLiteral("All");
-const QString kPackagesInstall = QStringLiteral("packages.install");
+const QString kAppsInstall = QStringLiteral("apps.install");
 const QString kAppsSearch = QStringLiteral("apps.search");
 const QString kLocal = QStringLiteral("local");
 const QString kShell = QStringLiteral("main_ui");
@@ -371,7 +371,7 @@ bool AppManager::uninstall(const QString& name, const QString& repositoryUrl)
 
 bool AppManager::provides(const QString& intent)
 {
-    return intent == kPackagesInstall || intent == kAppsSearch;
+    return intent == kAppsInstall || intent == kAppsSearch;
 }
 
 bool AppManager::deliver(const QString& intent, const QVariantMap& params, const QString& requester,

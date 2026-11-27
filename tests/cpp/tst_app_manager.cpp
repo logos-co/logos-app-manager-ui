@@ -12,6 +12,10 @@
 #include <logos/installer/Installer.h>
 #include <logos/installer/Types.h>
 
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QSignalSpy>
 
@@ -268,7 +272,7 @@ TEST(one_request_at_a_time_in_the_order_asked) {
     CHECK_EQ(a.lastParams().value("name").toString(), QStringLiteral("chat_ui"));
 }
 
-// ── packages.install, delivered by intents_module ────────────────────────
+// ── apps.install, delivered by intents_module ────────────────────────────
 
 struct Responses {
     QList<QPair<bool, QString>> got;
@@ -285,7 +289,7 @@ bool shellAsks(App& a, const QString& name, const QString& repositoryUrl = {})
     const auto taken = std::make_shared<bool>(false);
     QVariantMap params{{"name", name}};
     if (!repositoryUrl.isEmpty()) params.insert("repositoryUrl", repositoryUrl);
-    a.manager.deliver("packages.install", params, "main_ui",
+    a.manager.deliver("apps.install", params, "main_ui",
                       [taken](bool ok, const QString&) { *taken = ok; });
     return *taken;
 }
@@ -294,7 +298,7 @@ bool shellAsks(App& a, const QString& name, const QString& repositoryUrl = {})
 bool otherAppAsks(App& a, const QString& name)
 {
     const auto taken = std::make_shared<bool>(false);
-    a.manager.deliver("packages.install", {{"name", name}}, "chat_ui",
+    a.manager.deliver("apps.install", {{"name", name}}, "chat_ui",
                       [taken](bool ok, const QString&) { *taken = ok; });
     return *taken;
 }
@@ -343,7 +347,7 @@ TEST(a_delivery_waits_for_the_catalog_then_installs) {
     App a;
     a.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W")};
     Responses r;
-    CHECK(a.manager.deliver("packages.install", {{"name", "wallet_ui"}}, "main_ui", r.respond()));
+    CHECK(a.manager.deliver("apps.install", {{"name", "wallet_ui"}}, "main_ui", r.respond()));
     CHECK(r.got.isEmpty());
     a.manager.load();
     CHECK_EQ(r.got.size(), 1);
@@ -361,7 +365,7 @@ TEST(another_apps_delivery_shows_the_app_and_asks_basecamp_nothing) {
     a.manager.load();
     for (const char* requester : {"chat_ui", "logos_link", ""}) {
         Responses r;
-        CHECK(a.manager.deliver("packages.install", {{"name", "wallet_ui"}}, requester, r.respond()));
+        CHECK(a.manager.deliver("apps.install", {{"name", "wallet_ui"}}, requester, r.respond()));
         CHECK_EQ(r.got.size(), 1);
         CHECK(r.got.first().first);
         CHECK_EQ(a.manager.details().value("name").toString(), QStringLiteral("wallet_ui"));
@@ -372,7 +376,7 @@ TEST(another_apps_delivery_shows_the_app_and_asks_basecamp_nothing) {
     App b;
     b.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W")};
     Responses r;
-    CHECK(b.manager.deliver("packages.install", {{"name", "wallet_ui"}}, "chat_ui", r.respond()));
+    CHECK(b.manager.deliver("apps.install", {{"name", "wallet_ui"}}, "chat_ui", r.respond()));
     b.manager.load();
     CHECK_EQ(r.got.size(), 1);
     CHECK(b.basecamp.asked.isEmpty());
@@ -414,7 +418,7 @@ TEST(by_name_only_an_app_is_found) {
     a.manager.load();
     CHECK(!otherAppAsks(a, "signer"));
     Responses r;
-    CHECK(a.manager.deliver("packages.install", {{"name", "signer"}}, "main_ui", r.respond()));
+    CHECK(a.manager.deliver("apps.install", {{"name", "signer"}}, "main_ui", r.respond()));
     CHECK(!r.got.first().first);
     CHECK(a.basecamp.asked.isEmpty());
 }
@@ -423,7 +427,7 @@ TEST(a_delivery_for_what_no_repository_has_fails) {
     App a;
     a.manager.load();
     Responses r;
-    CHECK(a.manager.deliver("packages.install", {{"name", "nothing_ui"}}, "main_ui", r.respond()));
+    CHECK(a.manager.deliver("apps.install", {{"name", "nothing_ui"}}, "main_ui", r.respond()));
     CHECK_EQ(r.got.size(), 1);
     CHECK(!r.got.first().first);
     CHECK_EQ(r.got.first().second, QStringLiteral("failed"));
@@ -435,13 +439,33 @@ TEST(a_delivery_that_waits_too_long_fails_once) {
     a.modules.catalog = {app(kDefault, "wallet_ui", "1.0.0", "W")};
     a.manager.setDeliveryTimeout(10);
     Responses r;
-    CHECK(a.manager.deliver("packages.install", {{"name", "wallet_ui"}}, "main_ui", r.respond()));
+    CHECK(a.manager.deliver("apps.install", {{"name", "wallet_ui"}}, "main_ui", r.respond()));
     SPIN(50);
     CHECK_EQ(r.got.size(), 1);
     CHECK(!r.got.first().first);
     a.manager.load();
     CHECK_EQ(r.got.size(), 1);
     CHECK(a.basecamp.asked.isEmpty());
+}
+
+// What intents_module delivers here: apps.install and apps.search, as
+// metadata.json declares them. packages.install is Package Manager's, as it
+// was before App Manager left Basecamp: Basecamp's Install for a package went
+// here, which shows only apps, and nothing came up.
+TEST(it_provides_apps_install_and_apps_search_as_it_declares) {
+    CHECK(AppManager::provides(QStringLiteral("apps.install")));
+    CHECK(AppManager::provides(QStringLiteral("apps.search")));
+    CHECK(!AppManager::provides(QStringLiteral("packages.install")));
+    CHECK(!AppManager::provides(QStringLiteral("packages.show")));
+
+    QFile metadata(QStringLiteral(APP_SOURCE_DIR "/../metadata.json"));
+    CHECK(metadata.open(QIODevice::ReadOnly));
+    QStringList declared;
+    const QJsonArray provides =
+        QJsonDocument::fromJson(metadata.readAll()).object().value(QStringLiteral("provides")).toArray();
+    for (const QJsonValue& v : provides) declared << v.toObject().value(QStringLiteral("intent")).toString();
+    declared.sort();
+    CHECK_EQ(declared, (QStringList{QStringLiteral("apps.install"), QStringLiteral("apps.search")}));
 }
 
 TEST(apps_search_closes_the_details_and_searches) {
