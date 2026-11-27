@@ -33,7 +33,7 @@ target_link_libraries(app_manager_core PUBLIC Qt6::Core Qt6::Network ICU::i18n I
 target_compile_options(app_manager_core PRIVATE -Wall -Wextra -Werror)
 
 enable_testing()
-foreach(t app_sections app_manager)
+foreach(t app_sections app_manager module_calls)
     add_executable(tst_${t} cpp/tst_${t}.cpp)
     # Gui: QStandardItemModel, for a source the sections test drives.
     target_link_libraries(tst_${t} PRIVATE app_manager_core Qt6::Gui Qt6::Test)
@@ -41,5 +41,7 @@ foreach(t app_sections app_manager)
     add_test(NAME ${t} COMMAND tst_${t})
 endforeach()
 
-# tst_app_manager reads the module's own metadata.json.
-target_compile_definitions(tst_app_manager PRIVATE APP_SOURCE_DIR="${APP_SRC}")
+# Both read the module's own sources.
+foreach(t app_manager module_calls)
+    target_compile_definitions(tst_${t} PRIVATE APP_SOURCE_DIR="${APP_SRC}")
+endforeach()

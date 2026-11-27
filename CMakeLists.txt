@@ -27,6 +27,7 @@ logos_module(
         src/AppManager.cpp
         src/AppSections.h
         src/AppSections.cpp
+        src/CallFailure.h
         src/ModuleCalls.h
         src/ModuleCalls.cpp
         ${BASECAMP_INSTALLER_COMMON_SOURCES}
